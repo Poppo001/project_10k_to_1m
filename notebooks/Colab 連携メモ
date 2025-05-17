@@ -1,0 +1,4 @@
+!git clone <your repo>
+%cd project_10k_to_1m
+!pip install pandas_ta  # 追加ライブラリ
+!python -m src.data.feature_gen --file USDJPY_H1_20000.csv

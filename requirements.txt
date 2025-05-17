@@ -1,0 +1,17 @@
+MetaTrader5
+pandas
+numpy
+scikit-learn
+xgboost
+lightgbm
+# ta-lib
+pandas-ta
+fredapi
+tweepy
+shap
+mlflow
+optuna
+backtrader
+schedule
+pydrive
+python-dotenv

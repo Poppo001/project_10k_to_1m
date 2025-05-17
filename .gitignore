@@ -2,7 +2,12 @@ data/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
-.envv e n v /  
- * . t x t 
+.envv e n v / 
+ 
+ * . t x t 
+
  venv/
 *.txt
+
+# Python virtual environments
+venv/
