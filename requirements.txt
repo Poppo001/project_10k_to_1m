@@ -6,6 +6,7 @@ xgboost
 lightgbm
 # ta-lib
 pandas-ta
+pandas_ta
 fredapi
 tweepy
 shap

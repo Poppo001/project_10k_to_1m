@@ -8,14 +8,22 @@ __pycache__/
  venv/
 *.txt
 
+*.csv
+*.pkl
+*.h5
+
 # Python virtual environments
 venv/
 
 # Git 管理から除外
-data/
+data/**
 *.csv
 *.pkl
 *.h5
+
+# ただし src/data/ だけは追跡させる
+!src/data/
+!src/data/**
 
 # data warehouse – never tracked!
 ../project_10k_to_1m_data/
