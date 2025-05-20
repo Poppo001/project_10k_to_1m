@@ -5,7 +5,7 @@ scikit-learn
 xgboost
 lightgbm
 # ta-lib
-pandas-ta
+numpy<2.0
 pandas_ta
 fredapi
 tweepy
