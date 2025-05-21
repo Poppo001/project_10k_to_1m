@@ -27,14 +27,13 @@ def main():
     df_feat = df.copy()
     df_feat["row_number"] = range(1, len(df) + 1)
 
-    # 入力ファイル名だけ抜き出す（拡張子なし）
-    basename = infile_path.stem  # 例: USDJPY_H1_20000
-    out_dir = Path("data/processed")
+    # 出力先フォルダを「大容量データ専用」に変更
+    basename = infile_path.stem
+    out_dir = Path("/content/drive/MyDrive/project_10k_to_1m_data/processed")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     out_path = out_dir / f"feat_{basename}.csv"
     print(f"[INFO] 出力: {out_path}")
-
     df_feat.to_csv(out_path, index=False)
     print("[INFO] 完了: 特徴量CSVを保存しました。")
 
