@@ -1,3 +1,7 @@
+import pandas as pd
+import argparse
+from pathlib import Path
+
 def generate_labels(df: pd.DataFrame, tp_pips: int, sl_pips: int, symbol: str) -> pd.DataFrame:
     pip_factor = 0.01 if "JPY" in symbol else 0.0001
     tp = tp_pips * pip_factor
