@@ -1,11 +1,5 @@
-# src/data/label_gen.py
-
-import argparse
-import pandas as pd
-from pathlib import Path
-
-def generate_labels(df: pd.DataFrame, tp_pips: int, sl_pips: int) -> pd.DataFrame:
-    pip_factor = 0.01 if "JPY" in df["symbol"].iloc[0] else 0.0001
+def generate_labels(df: pd.DataFrame, tp_pips: int, sl_pips: int, symbol: str) -> pd.DataFrame:
+    pip_factor = 0.01 if "JPY" in symbol else 0.0001
     tp = tp_pips * pip_factor
     sl = sl_pips * pip_factor
 
@@ -32,6 +26,7 @@ def main():
     parser.add_argument("--file", required=True, help="特徴量CSV (feat_*.csv)")
     parser.add_argument("--tp", type=int, default=30, help="TP (pips)")
     parser.add_argument("--sl", type=int, default=30, help="SL (pips)")
+    parser.add_argument("--symbol", type=str, required=True, help="例: USDJPY")
     args = parser.parse_args()
 
     in_path = Path(args.file)
@@ -41,7 +36,7 @@ def main():
     print(f"[INFO] 入力: {in_path}")
     df = pd.read_csv(in_path)
 
-    df_labeled = generate_labels(df, args.tp, args.sl)
+    df_labeled = generate_labels(df, args.tp, args.sl, args.symbol)
     print(f"[INFO] ラベル付与完了: {len(df_labeled)} rows")
 
     basename = in_path.stem.replace("feat_", "")
@@ -55,4 +50,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
