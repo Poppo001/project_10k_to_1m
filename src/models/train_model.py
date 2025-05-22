@@ -17,19 +17,22 @@ def main():
     df = pd.read_csv(in_path)
     print(f"[INFO] 学習データ読込: {in_path}")
 
-    # 特徴量・目的変数の指定
-features = [c for c in df.columns if c not in ["label", "win_loss", "time"]]
-X = df[features].copy()
+    # 特徴量の選択： label, win_loss, time は除外
+    features = [c for c in df.columns if c not in ["label", "win_loss", "time"]]
+    X = df[features].copy()
 
-# オブジェクト型のカラムはfloat変換。それができない場合は除外
-for col in X.columns:
-    if X[col].dtype == "O":
-        try:
-            X[col] = X[col].astype(float)
-        except:
-            print(f"カラム {col} はfloat化できず除外します")
-            X = X.drop(columns=[col])
-y = df["label"]
+    # object型（文字列）カラムはfloat化。それが無理なら除外
+    for col in X.columns:
+        if X[col].dtype == "O":
+            try:
+                X[col] = X[col].astype(float)
+            except:
+                print(f"カラム {col} はfloat化できず除外します")
+                X = X.drop(columns=[col])
+    y = df["label"]
+
+    # 学習・検証データ分割
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
 
     # モデル学習
     model = XGBClassifier(tree_method="hist", use_label_encoder=False, eval_metric="logloss")
