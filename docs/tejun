@@ -1,0 +1,46 @@
+📌 全体フローの概要（最新版）
+以下の流れでAIトレードを実施します。
+
+MT5からデータ取得（get_mt5_ohlcv.py）
+
+特徴量生成（feature_gen_full.py）
+
+ラベル付与（label_gen.py）
+
+動的特徴量選択・ローリング再学習（auto_feature_selection.py）👈 今回追加
+
+バックテスト（backtest.py）
+
+🚩 実行方法の手順（推奨ワークフロー）
+ローソク足データ取得
+
+bash
+コードをコピーする
+python src/data/get_mt5_ohlcv.py
+特徴量生成（テクニカル指標付き）
+
+bash
+コードをコピーする
+python src/data/feature_gen_full.py
+ラベル生成
+
+bash
+コードをコピーする
+python src/data/label_gen.py
+動的特徴量選択・再学習
+
+bash
+コードをコピーする
+python src/auto_feature_selection.py
+バックテスト評価
+
+bash
+コードをコピーする
+python src/backtest.py
+
+ 今後の高度化案
+Optuna等のAutoMLによる自動パラメータチューニング
+
+オンライン学習化（リアルタイムデータ適応）
+
+複数モデルアンサンブル化

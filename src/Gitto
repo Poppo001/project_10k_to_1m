@@ -1,0 +1,6 @@
+
+gitへプッシュする手順
+
+git add src/data/feature_gen.py src/data/label_gen.py src/data/fetch_and_label.py src/models/train_model.py
+git commit -m "Unify output path to project_10k_to_1m_data/processed"
+git push

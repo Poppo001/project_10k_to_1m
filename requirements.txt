@@ -11,8 +11,12 @@ fredapi
 tweepy
 shap
 mlflow
+matplotlib
+seaborn
 optuna
 backtrader
 schedule
 pydrive
 python-dotenv
+ta
+scikit-learn

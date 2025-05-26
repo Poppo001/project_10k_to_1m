@@ -1,0 +1,6 @@
+まとめ：修正すべきパターン
+すべての出力・保存先パスを
+Path("/content/drive/MyDrive/project_10k_to_1m_data/processed")
+で統一
+
+他のファイルでも同様の out_dir 記述に修正してください。

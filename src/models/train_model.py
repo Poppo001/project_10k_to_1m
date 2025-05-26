@@ -1,57 +1,49 @@
+# src/models/train_model.py
+"""
+引数でCSV/モデル/レポートの入出力パスを指定
+例:
+python src/models/train_model.py --file 入力CSV --model_out モデルpkl --report_out レポートjson
+"""
+
 import argparse
 import pandas as pd
-from pathlib import Path
-from xgboost import XGBClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 import joblib
+import json
+from xgboost import XGBClassifier
+from sklearn.metrics import classification_report, accuracy_score
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--file", type=str, required=True, help="ラベル付きCSVファイル")
+    parser.add_argument("--file", type=str, required=True, help="学習データCSV")
+    parser.add_argument("--model_out", type=str, required=True, help="モデル出力パス")
+    parser.add_argument("--report_out", type=str, required=True, help="成績レポートJSON出力先")
     args = parser.parse_args()
 
-    in_path = Path(args.file)
-    if not in_path.exists():
-        raise FileNotFoundError(in_path)
-    df = pd.read_csv(in_path)
-    print(f"[INFO] 学習データ読込: {in_path}")
+    df = pd.read_csv(args.file)
+    feature_cols = [c for c in df.columns if c not in ["label", "win_loss", "time", "signal", "prob", "equity", "trade_pips"]]
+    train = df.iloc[:-2000]
+    test = df.iloc[-2000:]
+    X_train, y_train = train[feature_cols], train["label"]
+    X_test, y_test = test[feature_cols], test["label"]
 
-    # 特徴量の選択： label, win_loss, time は除外
-    features = [c for c in df.columns if c not in ["label", "win_loss", "time"]]
-    X = df[features].copy()
-
-    # object型（文字列）カラムはfloat化。それが無理なら除外
-    for col in X.columns:
-        if X[col].dtype == "O":
-            try:
-                X[col] = X[col].astype(float)
-            except:
-                print(f"カラム {col} はfloat化できず除外します")
-                X = X.drop(columns=[col])
-    y = df["label"]
-
-    # 学習・検証データ分割
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
-
-    # モデル学習
     model = XGBClassifier(tree_method="hist", use_label_encoder=False, eval_metric="logloss")
     model.fit(X_train, y_train)
-    print("[INFO] モデル学習完了")
-
-    # 推論・評価
     y_pred = model.predict(X_test)
     acc = accuracy_score(y_test, y_pred)
-    print(f"[INFO] 精度: {acc:.3f}")
-    print(classification_report(y_test, y_pred))
-    print("混同行列:\n", confusion_matrix(y_test, y_pred))
+    report = classification_report(y_test, y_pred, output_dict=True)
 
     # モデル保存
-    out_dir = Path("/content/drive/MyDrive/project_10k_to_1m_data/processed")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"xgb_model_{in_path.stem}.pkl"
-    joblib.dump(model, out_path)
-    print(f"[INFO] モデル保存: {out_path}")
+    joblib.dump(model, args.model_out)
+    # レポート保存
+    out = {
+        "accuracy": acc,
+        "classification_report": report
+    }
+    with open(args.report_out, "w") as f:
+        json.dump(out, f, indent=2)
+    print(f"[INFO] モデル保存: {args.model_out}")
+    print(f"[INFO] レポート保存: {args.report_out}")
+    print(f"[INFO] 精度: {acc:.4f}")
 
 if __name__ == "__main__":
     main()
