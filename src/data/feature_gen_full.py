@@ -4,117 +4,127 @@ import pandas as pd
 import numpy as np
 import ta
 
+from ta.trend import (
+    SMAIndicator, EMAIndicator, MACD, CCIIndicator, ADXIndicator, IchimokuIndicator, PSARIndicator
+)
+from ta.momentum import (
+    RSIIndicator, StochasticOscillator, ROCIndicator, AwesomeOscillatorIndicator, KAMAIndicator
+)
+from ta.volatility import (
+    BollingerBands, AverageTrueRange
+)
+from ta.volume import (
+    OnBalanceVolumeIndicator, MFIIndicator
+)
+
 # 入出力設定
 INPUT = "data/MT5_OHLCV/USDJPY_H1_100000.csv"
 OUTPUT = "data/processed/feat_USDJPY_H1_FULL.csv"
 
-# データ読み込み
+# --- データ読込 ---
 df = pd.read_csv(INPUT)
 
 # --- 移動平均線 ---
-ma_windows = [5, 10, 20, 30, 40, 50, 100, 200]
-for window in ma_windows:
-    df[f"ma_{window}"] = df["close"].rolling(window).mean()
+for n in [5, 10, 20, 30, 40, 50, 100, 200]:
+    df[f"sma_{n}"] = SMAIndicator(df["close"], window=n).sma_indicator()
+    df[f"ema_{n}"] = EMAIndicator(df["close"], window=n).ema_indicator()
+    df[f"sma_dev_{n}"] = (df["close"] - df[f"sma_{n}"]) / df[f"sma_{n}"]
 
-# --- 移動平均乖離率 ---
-for window in ma_windows:
-    df[f"ma_dev_{window}"] = (df["close"] - df[f"ma_{window}"]) / df[f"ma_{window}"] * 100
+# --- エンベロープ ---
+for n in [20]:
+    df[f"env_upper_{n}"] = df[f"sma_{n}"] * 1.03  # 3%上
+    df[f"env_lower_{n}"] = df[f"sma_{n}"] * 0.97  # 3%下
 
-# --- エンベロープ (±1%) ---
-envelope_pct = 0.01
-df["env_upper"] = df["ma_20"] * (1 + envelope_pct)
-df["env_lower"] = df["ma_20"] * (1 - envelope_pct)
-
-# --- パラボリック ---
-df["parabolic"] = ta.trend.psar(df["high"], df["low"], df["close"])
+# --- パラボリックSAR ---
+psar = PSARIndicator(df["high"], df["low"], df["close"])
+df["psar"] = psar.psar()
 
 # --- 一目均衡表 ---
-ichi = ta.trend.IchimokuIndicator(df["high"], df["low"])
-df["ichi_conversion"] = ichi.ichimoku_conversion_line()
-df["ichi_base"] = ichi.ichimoku_base_line()
-df["ichi_span_a"] = ichi.ichimoku_a()
-df["ichi_span_b"] = ichi.ichimoku_b()
+ichimoku = IchimokuIndicator(df["high"], df["low"])
+df["ichimoku_a"] = ichimoku.ichimoku_a()
+df["ichimoku_b"] = ichimoku.ichimoku_b()
+df["ichimoku_base"] = ichimoku.ichimoku_base_line()
+df["ichimoku_conv"] = ichimoku.ichimoku_conversion_line()
 
-# --- ボリンジャーバンド (±1σ, ±2σ, ±3σ, 20日基準) ---
-bb_window = 20
-bb_std = df["close"].rolling(bb_window).std()
-df["bb_middle"] = df["close"].rolling(bb_window).mean()
-df["bb_high_1"] = df["bb_middle"] + bb_std
-df["bb_low_1"] = df["bb_middle"] - bb_std
-df["bb_high_2"] = df["bb_middle"] + 2 * bb_std
-df["bb_low_2"] = df["bb_middle"] - 2 * bb_std
-df["bb_high_3"] = df["bb_middle"] + 3 * bb_std
-df["bb_low_3"] = df["bb_middle"] - 3 * bb_std
+# --- ボリンジャーバンド（±1σ, 2σ, 3σ）---
+for n, sigmas in [(20, [1, 2, 3])]:
+    for sigma in sigmas:
+        bb = BollingerBands(df["close"], window=n, window_dev=sigma)
+        df[f"bb_bbm_{sigma}"] = bb.bollinger_mavg()
+        df[f"bb_bbh_{sigma}"] = bb.bollinger_hband()
+        df[f"bb_bbl_{sigma}"] = bb.bollinger_lband()
 
 # --- RSI ---
-df["rsi_14"] = ta.momentum.rsi(df["close"])
+df["rsi_14"] = RSIIndicator(df["close"], window=14).rsi()
 
 # --- ストキャスティクス ---
-stoch = ta.momentum.StochasticOscillator(df["high"], df["low"], df["close"])
-df["stoch_k"] = stoch.stoch()
-df["stoch_d"] = stoch.stoch_signal()
+sto = StochasticOscillator(df["high"], df["low"], df["close"], window=14)
+df["stoch_k"] = sto.stoch()
+df["stoch_d"] = sto.stoch_signal()
 
 # --- サイコロジカルライン ---
-df["psycho_line"] = df["close"].rolling(12).apply(lambda x: np.sum(np.diff(x) > 0) / 12 * 100)
+n = 12
+df["psy"] = df["close"].rolling(n).apply(lambda x: np.sum(x > x.shift(1)) / n * 100 if len(x) == n else np.nan)
 
 # --- MACD ---
-macd = ta.momentum.MACD(df["close"])
+macd = MACD(df["close"])
 df["macd"] = macd.macd()
 df["macd_signal"] = macd.macd_signal()
 df["macd_diff"] = macd.macd_diff()
 
 # --- RCI ---
-def rci(series, period=9):
-    rank_period = series.rolling(period).apply(lambda x: np.corrcoef(x, np.arange(period))[0, 1])
-    return rank_period * 100
-df["rci_9"] = rci(df["close"], 9)
+def rci_func(x):
+    n = len(x)
+    ranks = pd.Series(x).rank().values
+    t = np.arange(1, n + 1)
+    d = np.sum((ranks - t) ** 2)
+    return (1 - 6 * d / (n * (n ** 2 - 1))) * 100
 
-# --- DMI ---
-adx = ta.trend.ADXIndicator(df["high"], df["low"], df["close"])
+df["rci_9"] = df["close"].rolling(window=9).apply(rci_func, raw=False)
+df["rci_26"] = df["close"].rolling(window=26).apply(rci_func, raw=False)
+
+# --- DMI（ADX, DMI+-, DI+-） ---
+adx = ADXIndicator(df["high"], df["low"], df["close"], window=14)
 df["adx"] = adx.adx()
 df["dmi_plus"] = adx.adx_pos()
 df["dmi_minus"] = adx.adx_neg()
 
 # --- モメンタム ---
-df["momentum"] = ta.momentum.ao(df["high"], df["low"])
+df["momentum_10"] = df["close"].diff(10)
+df["roc_10"] = ROCIndicator(df["close"], window=10).roc()
 
-# --- ROC ---
-df["roc"] = ta.momentum.roc(df["close"], window=12)
+# --- レシオケータ（KAMA） ---
+df["kama_10"] = KAMAIndicator(df["close"], window=10).kama()
+df["kama_30"] = KAMAIndicator(df["close"], window=30).kama()
 
-# --- レシオケータ ---
-df["ratio_indicator"] = (df["close"] / df["close"].shift(10)) * 100
+# --- ATR ---
+df["atr_14"] = AverageTrueRange(df["high"], df["low"], df["close"], window=14).average_true_range()
 
-# 追加推奨指標
-# --- OBV ---
-df["obv"] = ta.volume.on_balance_volume(df["close"], df["tick_volume"])
+# --- OBV（On-Balance Volume）---
+df["obv"] = OnBalanceVolumeIndicator(close=df["close"], volume=df["tick_volume"]).on_balance_volume()
 
-# --- VWAP ---
-df["vwap"] = ta.volume.volume_weighted_average_price(df["high"], df["low"], df["close"], df["tick_volume"])
+# --- MFI（Money Flow Index）---
+df["mfi_14"] = MFIIndicator(high=df["high"], low=df["low"], close=df["close"], volume=df["tick_volume"], window=14).money_flow_index()
 
-# --- ヒストリカルボラティリティ ---
-df["hist_vol_20"] = df["close"].pct_change().rolling(20).std() * np.sqrt(252)
+# --- Awesome Oscillator ---
+df["ao"] = AwesomeOscillatorIndicator(df["high"], df["low"]).awesome_oscillator()
 
-# --- ケルトナーチャネル ---
-kc = ta.volatility.KeltnerChannel(df["high"], df["low"], df["close"])
-df["kc_high"] = kc.keltner_channel_hband()
-df["kc_low"] = kc.keltner_channel_lband()
+# --- Price Action（ローソク足特徴量）---
+df["candle_size"] = df["high"] - df["low"]
+df["candle_body"] = abs(df["close"] - df["open"])
+df["upper_shadow"] = df["high"] - df[["close", "open"]].max(axis=1)
+df["lower_shadow"] = df[["close", "open"]].min(axis=1) - df["low"]
+df["gap"] = df["open"] - df["close"].shift(1)
+df["return"] = df["close"].pct_change()
 
-# --- プライスアクション系 ---
-df["inside_bar"] = ((df["high"] < df["high"].shift(1)) & (df["low"] > df["low"].shift(1))).astype(int)
-df["outside_bar"] = ((df["high"] > df["high"].shift(1)) & (df["low"] < df["low"].shift(1))).astype(int)
+# --- 欠損値削除 ---
+df = df.dropna().reset_index(drop=True)
 
-# --- 時間季節性 ---
-df["hour"] = pd.to_datetime(df["time"]).dt.hour
-df["weekday"] = pd.to_datetime(df["time"]).dt.weekday
-df["month"] = pd.to_datetime(df["time"]).dt.month
-
-# --- 相関指標（DXY、米債利回り等）---
-# 相関データ（仮に同じDataFrame内にある場合）
-# df["corr_dxy_20"] = df["close"].rolling(20).corr(df["dxy"])
-# ※要外部データ取得済みの場合のみ有効化してください。
-
-# 欠損値処理
-df.dropna(inplace=True)
+# --- 保存 ---
+df.to_csv(OUTPUT, index=False)
+print(f"[INFO] 入力: {INPUT}")
+print(f"[INFO] 出力: {OUTPUT}")
+print(f"[INFO] 完了: {df.shape[0]}行, {df.shape[1]}列")
 
 # CSV保存
 df.to_csv(OUTPUT, index=False)

@@ -1,0 +1,80 @@
+はい、ご質問ありがとうございます。
+これは**PowerShell**の「実行ポリシー（Execution Policy）」が原因です。
+\*\*Windows（特にPowerShell）\*\*では、セキュリティのため “スクリプトの実行” が標準で禁止されています。
+
+---
+
+## 【解決方法：PowerShellで仮想環境が有効化できない場合】
+
+### 1. **一時的に実行ポリシーを変更（推奨・安全）**
+
+VS Codeのターミナルで、下記コマンドを**一度だけ**実行してください（管理者権限は不要です）：
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+このコマンドを実行**した後**で
+
+```powershell
+venv\Scripts\Activate.ps1
+```
+
+または
+
+```powershell
+.\venv\Scripts\Activate.ps1
+```
+
+と入力すれば仮想環境が有効化できます。
+
+---
+
+### 2. **毎回コマンドを省略して“cmd”モードで実行する場合（超簡単）**
+
+PowerShellではなく、\*\*cmd（コマンドプロンプト）\*\*としてターミナルを起動し、
+
+```bat
+venv\Scripts\activate.bat
+```
+
+で有効化できます。
+
+#### 【VS Codeターミナルのシェル切り替え手順】
+
+* ターミナル右上の「▼」ボタン＞「コマンドプロンプト」を選択
+* または、`Ctrl + Shift + P` → `Shell: Select Default Profile` → コマンドプロンプトを選択
+
+---
+
+## 【まとめ：一番安全でおすすめの方法】
+
+1. VS Codeターミナルが**PowerShell**の場合は
+
+   ```powershell
+   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+   ```
+
+   を**毎回ターミナル起動時に実行**（セッションごとの一時的な設定なので安全です）
+
+2. そのあと
+
+   ```powershell
+   .\venv\Scripts\Activate.ps1
+   ```
+
+   で仮想環境を有効化
+
+---
+
+### 【なぜこの問題が起きる？】
+
+* PowerShellは\*\*スクリプト実行（.ps1ファイル）\*\*をデフォルトでブロックしています。
+* これはウイルスやマルウェア対策のための**Windows標準仕様**です。
+* `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`は
+  “**今開いてるターミナルだけ**”でスクリプト実行を許可する安全な方法です。
+
+---
+
+ご不明な点があれば、そのままエラーメッセージを貼っていただければ最速で解決案をお伝えします！
+この手順でうまくいくか、ぜひお試しください。

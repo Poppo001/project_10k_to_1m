@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-import ta
+import pandas_ta as ta
 
 # --- 入出力設定（適宜変更してください） ---
 INPUT = "data/MT5_OHLCV/USDJPY_H1_100000.csv"
