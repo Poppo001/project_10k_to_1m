@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 # --- ファイルパスを最新フローに統一 ---
-CSV_PATH = "data/processed/feat_USDJPY_H1_FULL.csv"
+CSV_PATH = "data/processed/labeled_USDJPY_H1_FULL.csv"
 MODEL_OUT_DIR = Path("data/processed/models")
 MODEL_OUT_DIR.mkdir(parents=True, exist_ok=True)
 

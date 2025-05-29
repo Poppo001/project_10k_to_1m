@@ -1,0 +1,12 @@
+[
+  "sma_50",
+  "sma_100",
+  "sma_dev_200",
+  "sma_200",
+  "sma_dev_100",
+  "ichimoku_b",
+  "obv",
+  "ema_200",
+  "macd_signal",
+  "close"
+]

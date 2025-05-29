@@ -27,10 +27,9 @@ python src/data/feature_gen_full.py
 bash
 コードをコピーする
 python src/data/label_gen.py
-動的特徴量選択・再学習
 
+動的特徴量選択・再学習
 bash
-コードをコピーする
 python src/auto_feature_selection.py
 バックテスト評価
 
