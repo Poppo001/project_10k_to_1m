@@ -19,7 +19,7 @@ from ta.volume import (
 
 # 入出力設定
 INPUT = "data/MT5_OHLCV/USDJPY_H1_100000.csv"
-OUTPUT = "data/processed/feat_USDJPY_H1_FULL.csv"
+OUTPUT = "data/processed/feat_USDJPY_H1_100000.csv"
 
 # --- データ読込 ---
 df = pd.read_csv(INPUT)

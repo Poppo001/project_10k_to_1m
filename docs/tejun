@@ -22,17 +22,16 @@ python src/data/get_mt5_ohlcv.py
 bash
 コードをコピーする
 python src/data/feature_gen_full.py
-ラベル生成
 
+ラベル生成
 bash
-コードをコピーする
 python src/data/label_gen.py
 
 動的特徴量選択・再学習
 bash
 python src/auto_feature_selection.py
-バックテスト評価
 
+バックテスト評価
 bash
 コードをコピーする
 python src/backtest.py

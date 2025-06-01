@@ -1,0 +1,108 @@
+承知しました。これまでの**FX自動売買プロジェクト**で使用・作成した**主要なデータファイルと対応するスクリプト**について、**整理して一覧化**いたします。
+
+---
+
+## 1. データ取得
+
+**スクリプト例**:
+`src/data/get_mt5_ohlcv.py`
+**主な出力ファイル例**:
+
+* `USDJPY_H1_1000000bars.csv`
+* `BTCUSD_M5_100000bars.csv`
+* `XAUUSD_H4_50000bars.csv`
+  など（通貨ペア・時間足・本数ごとに可変）
+
+---
+
+## 2. 特徴量生成（テクニカル指標付与）
+
+**スクリプト例**:
+`src/data/feature_gen_full.py`
+**主な出力ファイル例**:
+
+* `feat_USDJPY_H1_1000000bars.csv`
+  ※「feat\_」＋元ファイル名
+* `feat_USDJPY_H1_1000000bars_TECH.csv`
+  ※TECHはテクニカル指標をさらに追加したバージョン
+
+---
+
+## 3. ラベル生成（TP/SLの成否や方向のラベル化）
+
+**スクリプト例**:
+`src/data/label_gen.py`
+**主な出力ファイル例**:
+
+* `labeled_USDJPY_H1_1000000bars.csv`
+  ※「labeled\_」＋元ファイル名
+
+---
+
+## 4. モデル学習
+
+**スクリプト例**:
+`src/models/train_model.py`
+**主な出力ファイル例**:
+
+* `xgb_model_allfeats_USDJPY_H1_1000000bars.pkl`
+  ※XGBoost等で全特徴量を使った学習モデル
+* `xgb_model_allfeats_USDJPY_H1_1000000bars_feature_cols.json`
+  ※上記モデルで使用した特徴量リスト
+
+---
+
+## 5. 動的特徴量選択・再学習
+
+**スクリプト例**:
+`src/auto_feature_selection.py`
+**主な出力ファイル例**:
+
+* `xgb_model_5000.pkl`
+  ※5000件ごと等、windowごとに最適特徴量で自動保存されたモデル
+* `feature_cols_5000.json`
+  ※上記で使用した特徴量リスト
+
+---
+
+## 6. バックテスト
+
+**スクリプト例**:
+`src/backtest.py`
+**主な出力ファイル例**:
+
+* 基本的には**モデルや特徴量リストを読込**し、バックテスト結果（画像やcsv）を別途保存
+* **資産曲線のグラフ画像**例：`equity_curve_USDJPY_H1.png`
+* **バックテスト集計結果CSV**：`backtest_result_USDJPY_H1.csv`（必要に応じて）
+
+---
+
+## 7. その他一時ファイル・処理済みファイル
+
+* `data/processed/` フォルダ配下にすべての中間・成果ファイルが集約
+* 各スクリプトで「INPUT/OUTPUTファイル名」を**printで明示**しているので履歴を確認しやすい構成
+
+---
+
+### 【まとめ】
+
+| スクリプト                       | 入力ファイル                      | 出力ファイル（例）                                       |
+| --------------------------- | --------------------------- | ----------------------------------------------- |
+| get\_mt5\_ohlcv.py          | MT5（API直取得）                 | USDJPY\_H1\_1000000bars.csv                     |
+| feature\_gen\_full.py       | USDJPY\_H1\_1000000bars.csv | feat\_USDJPY\_H1\_1000000bars.csv（\_TECH等）      |
+| label\_gen.py               | feat\_...csv                | labeled\_...csv                                 |
+| train\_model.py             | labeled\_...csv             | xgb\_model\_...pkl / ...\_feature\_cols.json    |
+| auto\_feature\_selection.py | labeled\_...csv             | xgb\_model\_5000.pkl / feature\_cols\_5000.json |
+| backtest.py                 | labeled\_...csv, モデル        | グラフ画像/集計csvなど                                   |
+
+---
+
+### 【ご注意】
+
+* ファイル名やディレクトリは**各スクリプトの引数**や設定で変わる場合がありますので、**スクリプト実行時のprintログ**も併せてご確認ください。
+* データがどの段階で、どのファイル名で保存されるかを**明示的に管理する**ことが運用ミス防止につながります。
+
+---
+
+もし**リネーム規則やディレクトリ構成をもっと最適化したい**場合もご提案可能ですので、気軽にご相談ください。
+（ご要望に合わせて自動整理・履歴管理の仕組みもご案内できます）
