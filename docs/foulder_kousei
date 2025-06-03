@@ -1,0 +1,18 @@
+project_10k_to_1m/
+├── data/
+│   ├── raw/
+│   ├── processed/
+├── models/
+├── reports/
+├── tools/
+│   └── auto_organize.py
+├── src/
+│   ├── fetch_ohlcv.py
+│   ├── feature_gen_full.py
+│   ├── label_gen.py
+│   ├── auto_feature_selection.py
+│   ├── train_model.py
+│   ├── backtest.py
+│   └── evaluate_model.py
+├── run_pipeline.py  ←★このスクリプト
+└── requirements.txt
