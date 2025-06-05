@@ -1,5 +1,7 @@
-# python src/data/feature_gen_full.py
+# src/data/feature_gen_full.py
 
+import argparse
+from pathlib import Path
 import pandas as pd
 import numpy as np
 import ta
@@ -17,115 +19,141 @@ from ta.volume import (
     OnBalanceVolumeIndicator, MFIIndicator
 )
 
-# 入出力設定
-INPUT = "data/MT5_OHLCV/USDJPY_H1_100000.csv"
-OUTPUT = "data/processed/feat_USDJPY_H1_100000.csv"
+def main():
+    parser = argparse.ArgumentParser(description="特徴量生成スクリプト")
+    parser.add_argument(
+        "--csv", required=True,
+        help="入力の MT5 OHLCV CSV ファイルパス（例: data/MT5_OHLCV/USDJPY_H1_100000.csv）"
+    )
+    parser.add_argument(
+        "--out", required=True,
+        help="出力する特徴量付き CSV のパス（例: data/processed/feat_USDJPY_H1_100000.csv）"
+    )
+    args = parser.parse_args()
 
-# --- データ読込 ---
-df = pd.read_csv(INPUT)
+    input_path = Path(args.csv)
+    output_path = Path(args.out)
 
-# --- 移動平均線 ---
-for n in [5, 10, 20, 30, 40, 50, 100, 200]:
-    df[f"sma_{n}"] = SMAIndicator(df["close"], window=n).sma_indicator()
-    df[f"ema_{n}"] = EMAIndicator(df["close"], window=n).ema_indicator()
-    df[f"sma_dev_{n}"] = (df["close"] - df[f"sma_{n}"]) / df[f"sma_{n}"]
+    # 入力ファイルの存在チェック
+    if not input_path.exists():
+        print(f"[ERROR] 入力ファイルが見つかりません: {input_path}")
+        return
 
-# --- エンベロープ ---
-for n in [20]:
-    df[f"env_upper_{n}"] = df[f"sma_{n}"] * 1.03  # 3%上
-    df[f"env_lower_{n}"] = df[f"sma_{n}"] * 0.97  # 3%下
+    # 出力先ディレクトリがなければ作成
+    output_dir = output_path.parent
+    if not output_dir.exists():
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-# --- パラボリックSAR ---
-psar = PSARIndicator(df["high"], df["low"], df["close"])
-df["psar"] = psar.psar()
+    # --- データ読込 ---
+    df = pd.read_csv(input_path)
 
-# --- 一目均衡表 ---
-ichimoku = IchimokuIndicator(df["high"], df["low"])
-df["ichimoku_a"] = ichimoku.ichimoku_a()
-df["ichimoku_b"] = ichimoku.ichimoku_b()
-df["ichimoku_base"] = ichimoku.ichimoku_base_line()
-df["ichimoku_conv"] = ichimoku.ichimoku_conversion_line()
+    # --- 移動平均線 ---
+    for n in [5, 10, 20, 30, 40, 50, 100, 200]:
+        df[f"sma_{n}"] = SMAIndicator(df["close"], window=n).sma_indicator()
+        df[f"ema_{n}"] = EMAIndicator(df["close"], window=n).ema_indicator()
+        df[f"sma_dev_{n}"] = (df["close"] - df[f"sma_{n}"]) / df[f"sma_{n}"]
 
-# --- ボリンジャーバンド（±1σ, 2σ, 3σ）---
-for n, sigmas in [(20, [1, 2, 3])]:
-    for sigma in sigmas:
-        bb = BollingerBands(df["close"], window=n, window_dev=sigma)
-        df[f"bb_bbm_{sigma}"] = bb.bollinger_mavg()
-        df[f"bb_bbh_{sigma}"] = bb.bollinger_hband()
-        df[f"bb_bbl_{sigma}"] = bb.bollinger_lband()
+    # --- エンベロープ ---
+    for n in [20]:
+        df[f"env_upper_{n}"] = df[f"sma_{n}"] * 1.03  # 3%上
+        df[f"env_lower_{n}"] = df[f"sma_{n}"] * 0.97  # 3%下
 
-# --- RSI ---
-df["rsi_14"] = RSIIndicator(df["close"], window=14).rsi()
+    # --- パラボリックSAR ---
+    psar = PSARIndicator(df["high"], df["low"], df["close"])
+    df["psar"] = psar.psar()
 
-# --- ストキャスティクス ---
-sto = StochasticOscillator(df["high"], df["low"], df["close"], window=14)
-df["stoch_k"] = sto.stoch()
-df["stoch_d"] = sto.stoch_signal()
+    # --- 一目均衡表 ---
+    ichimoku = IchimokuIndicator(df["high"], df["low"])
+    df["ichimoku_a"] = ichimoku.ichimoku_a()
+    df["ichimoku_b"] = ichimoku.ichimoku_b()
+    df["ichimoku_base"] = ichimoku.ichimoku_base_line()
+    df["ichimoku_conv"] = ichimoku.ichimoku_conversion_line()
 
-# --- サイコロジカルライン ---
-n = 12
-df["psy"] = df["close"].rolling(n).apply(lambda x: np.sum(x > x.shift(1)) / n * 100 if len(x) == n else np.nan)
+    # --- ボリンジャーバンド（±1σ, 2σ, 3σ）---
+    for n, sigmas in [(20, [1, 2, 3])]:
+        for sigma in sigmas:
+            bb = BollingerBands(df["close"], window=n, window_dev=sigma)
+            df[f"bb_bbm_{sigma}"] = bb.bollinger_mavg()
+            df[f"bb_bbh_{sigma}"] = bb.bollinger_hband()
+            df[f"bb_bbl_{sigma}"] = bb.bollinger_lband()
 
-# --- MACD ---
-macd = MACD(df["close"])
-df["macd"] = macd.macd()
-df["macd_signal"] = macd.macd_signal()
-df["macd_diff"] = macd.macd_diff()
+    # --- RSI ---
+    df["rsi_14"] = RSIIndicator(df["close"], window=14).rsi()
 
-# --- RCI ---
-def rci_func(x):
-    n = len(x)
-    ranks = pd.Series(x).rank().values
-    t = np.arange(1, n + 1)
-    d = np.sum((ranks - t) ** 2)
-    return (1 - 6 * d / (n * (n ** 2 - 1))) * 100
+    # --- ストキャスティクス ---
+    sto = StochasticOscillator(df["high"], df["low"], df["close"], window=14)
+    df["stoch_k"] = sto.stoch()
+    df["stoch_d"] = sto.stoch_signal()
 
-df["rci_9"] = df["close"].rolling(window=9).apply(rci_func, raw=False)
-df["rci_26"] = df["close"].rolling(window=26).apply(rci_func, raw=False)
+    # --- サイコロジカルライン ---
+    n = 12
+    df["psy"] = df["close"].rolling(n).apply(
+        lambda x: np.sum(x > x.shift(1)) / n * 100 if len(x) == n else np.nan
+    )
 
-# --- DMI（ADX, DMI+-, DI+-） ---
-adx = ADXIndicator(df["high"], df["low"], df["close"], window=14)
-df["adx"] = adx.adx()
-df["dmi_plus"] = adx.adx_pos()
-df["dmi_minus"] = adx.adx_neg()
+    # --- MACD ---
+    macd = MACD(df["close"])
+    df["macd"] = macd.macd()
+    df["macd_signal"] = macd.macd_signal()
+    df["macd_diff"] = macd.macd_diff()
 
-# --- モメンタム ---
-df["momentum_10"] = df["close"].diff(10)
-df["roc_10"] = ROCIndicator(df["close"], window=10).roc()
+    # --- RCI ---
+    def rci_func(x):
+        size = len(x)
+        ranks = pd.Series(x).rank().values
+        t = np.arange(1, size + 1)
+        d = np.sum((ranks - t) ** 2)
+        return (1 - 6 * d / (size * (size ** 2 - 1))) * 100
 
-# --- レシオケータ（KAMA） ---
-df["kama_10"] = KAMAIndicator(df["close"], window=10).kama()
-df["kama_30"] = KAMAIndicator(df["close"], window=30).kama()
+    df["rci_9"] = df["close"].rolling(window=9).apply(rci_func, raw=False)
+    df["rci_26"] = df["close"].rolling(window=26).apply(rci_func, raw=False)
 
-# --- ATR ---
-df["atr_14"] = AverageTrueRange(df["high"], df["low"], df["close"], window=14).average_true_range()
+    # --- DMI（ADX, DMI+-, DI+-） ---
+    adx = ADXIndicator(df["high"], df["low"], df["close"], window=14)
+    df["adx"] = adx.adx()
+    df["dmi_plus"] = adx.adx_pos()
+    df["dmi_minus"] = adx.adx_neg()
 
-# --- OBV（On-Balance Volume）---
-df["obv"] = OnBalanceVolumeIndicator(close=df["close"], volume=df["tick_volume"]).on_balance_volume()
+    # --- モメンタム ---
+    df["momentum_10"] = df["close"].diff(10)
+    df["roc_10"] = ROCIndicator(df["close"], window=10).roc()
 
-# --- MFI（Money Flow Index）---
-df["mfi_14"] = MFIIndicator(high=df["high"], low=df["low"], close=df["close"], volume=df["tick_volume"], window=14).money_flow_index()
+    # --- レシオケータ（KAMA） ---
+    df["kama_10"] = KAMAIndicator(df["close"], window=10).kama()
+    df["kama_30"] = KAMAIndicator(df["close"], window=30).kama()
 
-# --- Awesome Oscillator ---
-df["ao"] = AwesomeOscillatorIndicator(df["high"], df["low"]).awesome_oscillator()
+    # --- ATR ---
+    df["atr_14"] = AverageTrueRange(df["high"], df["low"], df["close"], window=14).average_true_range()
 
-# --- Price Action（ローソク足特徴量）---
-df["candle_size"] = df["high"] - df["low"]
-df["candle_body"] = abs(df["close"] - df["open"])
-df["upper_shadow"] = df["high"] - df[["close", "open"]].max(axis=1)
-df["lower_shadow"] = df[["close", "open"]].min(axis=1) - df["low"]
-df["gap"] = df["open"] - df["close"].shift(1)
-df["return"] = df["close"].pct_change()
+    # --- OBV（On-Balance Volume）---
+    df["obv"] = OnBalanceVolumeIndicator(
+        close=df["close"], volume=df["tick_volume"]
+    ).on_balance_volume()
 
-# --- 欠損値削除 ---
-df = df.dropna().reset_index(drop=True)
+    # --- MFI（Money Flow Index）---
+    df["mfi_14"] = MFIIndicator(
+        high=df["high"], low=df["low"], close=df["close"], volume=df["tick_volume"], window=14
+    ).money_flow_index()
 
-# --- 保存 ---
-df.to_csv(OUTPUT, index=False)
-print(f"[INFO] 入力: {INPUT}")
-print(f"[INFO] 出力: {OUTPUT}")
-print(f"[INFO] 完了: {df.shape[0]}行, {df.shape[1]}列")
+    # --- Awesome Oscillator ---
+    df["ao"] = AwesomeOscillatorIndicator(df["high"], df["low"]).awesome_oscillator()
 
-# CSV保存
-df.to_csv(OUTPUT, index=False)
-print(f"[INFO] 特徴量付き完全版CSVを保存しました: {OUTPUT}")
+    # --- Price Action（ローソク足特徴量）---
+    df["candle_size"] = df["high"] - df["low"]
+    df["candle_body"] = abs(df["close"] - df["open"])
+    df["upper_shadow"] = df["high"] - df[["close", "open"]].max(axis=1)
+    df["lower_shadow"] = df[["close", "open"]].min(axis=1) - df["low"]
+    df["gap"] = df["open"] - df["close"].shift(1)
+    df["return"] = df["close"].pct_change()
+
+    # --- 欠損値削除 ---
+    df = df.dropna().reset_index(drop=True)
+
+    # --- 保存 ---
+    df.to_csv(output_path, index=False)
+    print(f"[INFO] 入力: {input_path}")
+    print(f"[INFO] 出力: {output_path}")
+    print(f"[INFO] 完了: {df.shape[0]}行, {df.shape[1]}列")
+
+if __name__ == "__main__":
+    main()

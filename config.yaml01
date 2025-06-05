@@ -1,0 +1,22 @@
+# ────────────────────────────────────────────
+# config.yaml
+# ────────────────────────────────────────────
+
+project_base: "C:/Projects/project_10k_to_1m"
+
+# ここを "C:/Projects/project_10k_to_1m_data" のように絶対パスで記述します
+data_base:    "C:/Projects/project_10k_to_1m_data"
+
+# それぞれを data_base の下に配置しているので、ここも絶対パス
+mt5_data_dir:    "C:/Projects/project_10k_to_1m_data/raw"
+processed_dir:   "C:/Projects/project_10k_to_1m_data/processed"
+model_dir:       "C:/Projects/project_10k_to_1m_data/models"
+report_dir:      "C:/Projects/project_10k_to_1m_data/reports"
+
+# 各種パラメータ
+symbol:    "USDJPY"
+timeframe: "H1"
+bars:      100000
+tp:        30
+sl:        30
+# ────────────────────────────────────────────

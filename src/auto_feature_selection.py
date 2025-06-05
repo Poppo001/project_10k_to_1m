@@ -1,77 +1,117 @@
+# src/auto_feature_selection.py
+
+import argparse
 import pandas as pd
 import numpy as np
 import joblib
 from xgboost import XGBClassifier
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import classification_report
 import shap
 import json
 from pathlib import Path
 
-# --- ファイルパスを最新フローに統一 ---
-CSV_PATH = "data/processed/labeled_USDJPY_H1_FULL.csv"
-MODEL_OUT_DIR = Path("data/processed/models")
-MODEL_OUT_DIR.mkdir(parents=True, exist_ok=True)
+def main():
+    parser = argparse.ArgumentParser(description="自動特徴量選択スクリプト")
+    parser.add_argument(
+        "--csv", required=True,
+        help="入力のラベル付きCSVファイルパス（例: data/processed/labeled_USDJPY_H1_FULL.csv）"
+    )
+    parser.add_argument(
+        "--out_dir", required=True,
+        help="モデルと結果を保存するディレクトリパス（例: data/processed/models）"
+    )
+    parser.add_argument(
+        "--window_size", type=int, default=5000,
+        help="ローリングウィンドウのサイズ（デフォルト: 5000）"
+    )
+    parser.add_argument(
+        "--step", type=int, default=500,
+        help="ローリングウィンドウのステップ幅（デフォルト: 500）"
+    )
+    parser.add_argument(
+        "--top_k", type=int, default=10,
+        help="選択する特徴量の上位数（デフォルト: 10）"
+    )
+    args = parser.parse_args()
 
-# --- データ読み込み ---
-df = pd.read_csv(CSV_PATH)
+    input_path = Path(args.csv)
+    output_dir = Path(args.out_dir)
 
-# --- 目的変数（ラベル）および除外列設定 ---
-target_col = "label"
-drop_cols = ["label", "win_loss", "time", "signal", "prob", "equity", "trade_pips"]
-feature_cols_all = [c for c in df.columns if c not in drop_cols]
+    # 入力ファイルの存在確認
+    if not input_path.exists():
+        print(f"[ERROR] 入力ファイルが見つかりません: {input_path}")
+        return
 
-# --- ローリングウィンドウ設定 ---
-window_size = 5000
-step = 500
-top_k = 10
+    # 出力ディレクトリを作成
+    if not output_dir.exists():
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-results = []
+    # --- データ読み込み ---
+    df = pd.read_csv(input_path)
 
-for start in range(0, len(df) - window_size - step, step):
-    end = start + window_size
-    df_train = df.iloc[start:end]
-    df_test = df.iloc[end:end+step]
+    # --- 目的変数および除外列設定 ---
+    target_col = "label"
+    drop_cols = ["label", "win_loss", "time", "signal", "prob", "equity", "trade_pips"]
+    feature_cols_all = [c for c in df.columns if c not in drop_cols]
 
-    X_train, y_train = df_train[feature_cols_all], df_train[target_col]
-    X_test, y_test = df_test[feature_cols_all], df_test[target_col]
+    window_size = args.window_size
+    step = args.step
+    top_k = args.top_k
 
-    # 初回：全特徴量で学習
-    model_full = XGBClassifier(tree_method="hist", eval_metric="logloss", random_state=42)
-    model_full.fit(X_train, y_train)
+    results = []
 
-    # SHAP値で重要度分析
-    explainer = shap.TreeExplainer(model_full)
-    shap_values = explainer.shap_values(X_train)
+    for start in range(0, len(df) - window_size - step, step):
+        end = start + window_size
+        df_train = df.iloc[start:end]
+        df_test = df.iloc[end:end+step]
 
-    shap_abs_mean = np.abs(shap_values).mean(axis=0)
-    top_indices = np.argsort(shap_abs_mean)[::-1][:top_k]
-    selected_features = [feature_cols_all[i] for i in top_indices]
+        X_train, y_train = df_train[feature_cols_all], df_train[target_col]
+        X_test, y_test = df_test[feature_cols_all], df_test[target_col]
 
-    # 選抜された特徴量のみで再学習
-    model_selected = XGBClassifier(tree_method="hist", eval_metric="logloss", random_state=42)
-    model_selected.fit(X_train[selected_features], y_train)
+        # 初回：全特徴量で学習
+        model_full = XGBClassifier(tree_method="hist", eval_metric="logloss", random_state=42)
+        model_full.fit(X_train, y_train)
 
-    # テスト期間で予測・評価
-    y_pred = model_selected.predict(X_test[selected_features])
-    report = classification_report(y_test, y_pred, output_dict=True)
-    accuracy = report["accuracy"]
+        # SHAP値で重要度分析
+        explainer = shap.TreeExplainer(model_full)
+        shap_values = explainer.shap_values(X_train)
 
-    results.append({
-        "start_index": end,
-        "selected_features": selected_features,
-        "accuracy": accuracy,
-    })
+        shap_abs_mean = np.abs(shap_values).mean(axis=0)
+        top_indices = np.argsort(shap_abs_mean)[::-1][:top_k]
+        selected_features = [feature_cols_all[i] for i in top_indices]
 
-    # モデル・特徴量リストを保存
-    model_path = MODEL_OUT_DIR / f"xgb_model_{end}.pkl"
-    joblib.dump(model_selected, model_path)
-    with open(model_path.with_suffix('.json'), "w") as f:
-        json.dump(selected_features, f, ensure_ascii=False, indent=2)
+        # 選択された特徴量のみで再学習
+        model_selected = XGBClassifier(tree_method="hist", eval_metric="logloss", random_state=42)
+        model_selected.fit(X_train[selected_features], y_train)
 
-    print(f"[INFO] {end}: 精度={accuracy:.4f}, 特徴量={selected_features}")
-    print(f"[INFO] モデル保存: {model_path}")
+        # テスト期間で予測・評価
+        y_pred = model_selected.predict(X_test[selected_features])
+        report = classification_report(y_test, y_pred, output_dict=True)
+        accuracy = report["accuracy"]
 
-# --- 結果CSV保存 ---
-results_df = pd.DataFrame(results)
-results_df.to_csv(MODEL_OUT_DIR / "auto_feature_selection_results.csv", index=False)
-print("[INFO] 自動特徴量選択結果をCSV保存完了。")
+        results.append({
+            "start_index": end,
+            "selected_features": selected_features,
+            "accuracy": accuracy,
+        })
+
+        # モデルと特徴量リストを保存
+        model_path = output_dir / f"xgb_model_{end}.pkl"
+        joblib.dump(model_selected, model_path)
+
+        feat_json_path = model_path.with_suffix(".json")
+        with open(feat_json_path, "w", encoding="utf-8") as f:
+            json.dump(selected_features, f, ensure_ascii=False, indent=2)
+
+        print(f"[INFO] インデックス {end}: 精度={accuracy:.4f}, 特徴量={selected_features}")
+        print(f"[INFO] モデル保存: {model_path}")
+        print(f"[INFO] 特徴量リスト保存: {feat_json_path}")
+
+    # --- 結果CSV保存 ---
+    results_df = pd.DataFrame(results)
+    results_csv_path = output_dir / "auto_feature_selection_results.csv"
+    results_df.to_csv(results_csv_path, index=False)
+    print(f"[INFO] 自動特徴量選択結果をCSV保存完了: {results_csv_path}")
+
+if __name__ == "__main__":
+    main()

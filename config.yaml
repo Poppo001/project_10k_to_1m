@@ -1,0 +1,18 @@
+# ───────────────────────────────────────────────────────────────────
+# project_10k_to_1m/config.yaml
+# ───────────────────────────────────────────────────────────────────
+project_base: "."
+data_base:    "../project_10k_to_1m_data"
+
+mt5_data_dir:    "${data_base}/raw"
+processed_dir:   "${data_base}/processed"
+model_dir:       "${data_base}/models"
+report_dir:      "${data_base}/reports"
+
+symbol:    "USDJPY"
+timeframe: "H1"
+bars:      100000
+
+tp:        30
+sl:        30
+# ───────────────────────────────────────────────────────────────────
