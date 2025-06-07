@@ -9,7 +9,7 @@ processed_dir:   "${data_base}/processed"
 model_dir:       "${data_base}/models"
 report_dir:      "${data_base}/reports"
 
-symbol:    "EURJPY"
+symbol:    "USDJPY"
 timeframe: "H1"
 bars:      100000
 
