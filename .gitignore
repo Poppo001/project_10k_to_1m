@@ -20,6 +20,7 @@ data/**
 *.csv
 *.pkl
 *.h5
+*.json
 
 # ただし src/data/ だけは追跡させる
 !src/data/
