@@ -21,6 +21,7 @@ data/**
 *.pkl
 *.h5
 *.json
+models/**
 
 # ただし src/data/ だけは追跡させる
 !src/data/
