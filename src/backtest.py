@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # src/data/backtest.py
 
 import argparse
@@ -8,104 +9,110 @@ import json
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-# ──────────────────────────────────────────────────────────────
-# 日本語フォント設定（Windows の場合）
+# 日本語フォント設定（必要に応じて）
 plt.rcParams['font.family'] = 'MS Gothic'
-# Macなら 'Hiragino Maru Gothic Pro'、Linuxならインストール済みのIPAexGothicなどに置き換えてください
-# ──────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="バックテストスクリプト")
-    parser.add_argument(
-        "--csv", required=True,
-        help="入力のラベル付き特徴量CSVファイルパス（例: data/processed/selfeat_USDJPY_H1_100000.csv）"
-    )
-    parser.add_argument(
-        "--model", required=True,
-        help="使用する学習済みモデルファイルパス（.pkl）（例: data/models/xgb_model_5000.pkl）"
-    )
-    parser.add_argument(
-        "--report", required=True,
-        help="出力するバックテストレポートJSONのパス（例: data/reports/backtest_report_5000.json）"
-    )
-    parser.add_argument(
-        "--curve_out", required=True,
-        help="出力する損益曲線PNGのパス（例: data/reports/backtest_curve_5000.png）"
-    )
+    parser = argparse.ArgumentParser(description="リアルTP/SL対応バックテスト")
+    parser.add_argument("--csv",       required=True, help="入力CSV（ラベル付）")
+    parser.add_argument("--model",     required=True, help="学習済モデル.pkl")
+    parser.add_argument("--report",    required=True, help="出力レポートJSON")
+    parser.add_argument("--curve_out", required=True, help="出力損益曲線PNG")
+    parser.add_argument("--tp_pips",    type=float, default=30.0, help="TP (pips)")
+    parser.add_argument("--sl_pips",    type=float, default=30.0, help="SL (pips)")
+    parser.add_argument("--spread",     type=float, default=0.2,  help="往復スプレッド (pips)")
+    parser.add_argument("--commission", type=float, default=0.1,  help="往復手数料 (pips)")
+    parser.add_argument("--slippage",   type=float, default=0.5,  help="スリッページ (pips)")
     args = parser.parse_args()
 
-    input_path  = Path(args.csv)
-    model_path  = Path(args.model)
-    report_path = Path(args.report)
-    curve_path  = Path(args.curve_out)
+    # Paths
+    inp     = Path(args.csv)
+    mpath   = Path(args.model)
+    rpath   = Path(args.report)
+    curve_p = Path(args.curve_out)
 
-    # 入力CSV/モデルの存在チェック
-    if not input_path.exists():
-        print(f"[ERROR] 入力CSVファイルが見つかりません: {input_path}")
-        return
-    if not model_path.exists():
-        print(f"[ERROR] モデルファイルが見つかりません: {model_path}")
-        return
+    # Checks
+    for p in [inp, mpath]:
+        if not p.exists():
+            print(f"[ERROR] ファイルが見つかりません: {p}")
+            return
+    rpath.parent.mkdir(parents=True, exist_ok=True)
+    curve_p.parent.mkdir(parents=True, exist_ok=True)
 
-    # モデルに対応する特徴量JSONを決定
-    feature_cols_json = model_path.with_name(model_path.stem + "_feature_cols.json")
-    if not feature_cols_json.exists():
-        print(f"[ERROR] 特徴量リストJSONが見つかりません: {feature_cols_json}")
-        return
+    # Load data & model
+    df = pd.read_csv(inp)
+    model = joblib.load(mpath)
 
-    # 出力先ディレクトリを作成
-    for p in [report_path.parent, curve_path.parent]:
-        p.mkdir(parents=True, exist_ok=True)
+    # Load feature list
+    feat_json = mpath.with_name(mpath.stem + "_feature_cols.json")
+    with open(feat_json, 'r', encoding='utf-8') as f:
+        features = json.load(f)
 
-    # データ読み込み
-    df = pd.read_csv(input_path)
+    # Prepare containers
+    equity = []
+    cum = 0.0
 
-    # 特徴量カラム読み込み
-    with open(feature_cols_json, "r", encoding="utf-8") as f:
-        feature_cols = json.load(f)
+    # For each row, simulate trade based on TP/SL
+    for idx in range(len(df)-1):
+        entry_price = df.at[idx, "open"]  # 次バーの実オープン、または df.at[idx,"close"]
+        tp_price  = entry_price + args.tp_pips * 0.0001
+        sl_price  = entry_price - args.sl_pips * 0.0001
 
-    # 欠損値行を削除
-    df = df.dropna(subset=feature_cols).reset_index(drop=True)
+        # Look ahead until TP or SL is hit
+        hit = None
+        for j in range(idx+1, len(df)):
+            high = df.at[j, "high"]
+            low  = df.at[j, "low"]
+            if high >= tp_price:
+                hit = args.tp_pips
+                break
+            if low <= sl_price:
+                hit = -args.sl_pips
+                break
+        if hit is None:
+            # Neither hit: close at last close
+            exit_price = df.at[len(df)-1, "close"]
+            hit = (exit_price - entry_price) / 0.0001
 
-    # モデル読み込み
-    model = joblib.load(model_path)
+        # Adjust for spread, commission, slippage
+        net_pips = hit - args.spread - args.commission - args.slippage
+        cum += net_pips
+        equity.append(cum)
 
-    # 予測確率およびシグナル生成
-    df["prob"]   = model.predict_proba(df[feature_cols])[:, 1]
-    df["signal"] = (df["prob"] > 0.5).astype(int)
-
-    # 仮損益設定（Buy=+1pips, Sell=-1pips）
-    df["trade_pips"] = np.where(df["signal"] == 1, 1, -1)
-    df["equity"]     = df["trade_pips"].cumsum()
-
-    # 損益曲線描画＆保存
+    # Save equity curve plot
     plt.figure(figsize=(8,4))
-    plt.plot(df["equity"], linewidth=1)
-    plt.title("資産曲線（仮）")
-    plt.xlabel("取引番号")
-    plt.ylabel("累積獲得pips")
+    plt.plot(equity, linewidth=1)
+    plt.title("資産曲線 (実TP/SL+スプレッド/手数料/スリッページ考慮)")
+    plt.xlabel("トレード番号")
+    plt.ylabel("累積獲得 pips")
     plt.tight_layout()
-    plt.savefig(curve_path)
+    plt.savefig(curve_p)
     plt.close()
 
-    # 最終実績と最大ドローダウン計算
-    cumulative_pips = float(df["equity"].iloc[-1])
-    running_max     = df["equity"].cummax()
-    max_drawdown    = float((running_max - df["equity"]).max())
+    # Compute metrics
+    cumulative_pips = cum
+    running_max     = np.maximum.accumulate(equity)
+    drawdowns       = running_max - equity
+    max_dd          = float(np.max(drawdowns))
 
     print(f"[INFO] 累積獲得pips: {cumulative_pips:.2f}")
-    print(f"[INFO] 最大ドローダウン: {max_drawdown:.2f}")
+    print(f"[INFO] 最大ドローダウン: {max_dd:.2f}")
 
-    # レポートを JSON で保存
+    # Report JSON
     report = {
         "cumulative_pips": cumulative_pips,
-        "max_drawdown":    max_drawdown,
-        "n_trades":        int(len(df))
+        "max_drawdown":    max_dd,
+        "n_trades":        len(equity),
+        "tp_pips":         args.tp_pips,
+        "sl_pips":         args.sl_pips,
+        "spread":          args.spread,
+        "commission":      args.commission,
+        "slippage":        args.slippage
     }
-    with open(report_path, "w", encoding="utf-8") as f:
+    with open(rpath, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
 
-    print(f"[INFO] バックテストレポートを保存しました: {report_path}")
+    print(f"[INFO] バックテストレポートを保存: {rpath}")
 
 if __name__ == "__main__":
     main()
