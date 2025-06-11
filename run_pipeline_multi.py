@@ -9,203 +9,157 @@ import datetime
 from pathlib import Path
 
 def load_config():
-    """
-    Load paths and defaults from config.yaml, converting ${…} placeholders to absolute Paths.
-    """
-    config_path = Path(__file__).parent / "config.yaml"
-    with open(config_path, "r", encoding="utf-8") as f:
+    cfg_path = Path(__file__).parent / "config.yaml"
+    with open(cfg_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
     script_dir = Path(__file__).parent
 
-    def make_abspath(rel_path: str) -> Path:
-        text = rel_path.replace("${data_base}", cfg["data_base"])
-        text = text.replace("${project_base}", cfg["project_base"])
-        return (script_dir / text).resolve()
-
-    project_base   = make_abspath(cfg["project_base"])
-    data_base      = make_abspath(cfg["data_base"])
-    mt5_data_dir   = make_abspath(cfg["mt5_data_dir"])
-    processed_dir  = make_abspath(cfg["processed_dir"])
-    model_dir      = make_abspath(cfg["model_dir"])
-    report_dir     = make_abspath(cfg["report_dir"])
-    tools_dir      = project_base / "tools"
-
-    default_symbol    = cfg.get("symbol")
-    default_timeframe = cfg.get("timeframe")
-    default_bars      = cfg.get("bars")
-    default_tp        = cfg.get("tp", 30)
-    default_sl        = cfg.get("sl", 30)
+    def abspath(p):
+        return (script_dir / p.replace("${data_base}", cfg["data_base"])
+                              .replace("${project_base}", cfg["project_base"])
+               ).resolve()
 
     return {
-        "PROJECT_BASE": project_base,
-        "DATA_BASE": data_base,
-        "MT5_DATA_DIR": mt5_data_dir,
-        "PROCESSED_DIR": processed_dir,
-        "MODEL_DIR": model_dir,
-        "REPORT_DIR": report_dir,
-        "TOOLS_DIR": tools_dir,
-        "DEFAULT_SYMBOL": default_symbol,
-        "DEFAULT_TIMEFRAME": default_timeframe,
-        "DEFAULT_BARS": default_bars,
-        "DEFAULT_TP": default_tp,
-        "DEFAULT_SL": default_sl,
+        "PROJECT_BASE":  abspath(cfg["project_base"]),
+        "MT5_DATA_DIR":  abspath(cfg["mt5_data_dir"]),
+        "PROCESSED_DIR": abspath(cfg["processed_dir"]),
+        "MODEL_DIR":     abspath(cfg["model_dir"]),
+        "REPORT_DIR":    abspath(cfg["report_dir"]),
+        "TOOLS_DIR":     abspath(cfg["project_base"]) / "tools",
+        # デフォルトTP/SLをここで読み込む
+        "TP":            cfg.get("tp", 30),
+        "SL":            cfg.get("sl", 30),
+        "SPREAD":        cfg.get("spread", 0.2),
+        "COMMISSION":    cfg.get("commission", 0.1),
+        "SLIPPAGE":      cfg.get("slippage", 0.5),
     }
 
 def main():
-    # 1. Load config.yaml
     cfg = load_config()
-    PROJECT_BASE   = cfg["PROJECT_BASE"]
-    MT5_DATA_DIR   = cfg["MT5_DATA_DIR"]
-    PROCESSED_DIR  = cfg["PROCESSED_DIR"]
-    MODEL_DIR      = cfg["MODEL_DIR"]
-    REPORT_DIR     = cfg["REPORT_DIR"]
-    TOOLS_DIR      = cfg["TOOLS_DIR"]
+    PB = cfg["PROJECT_BASE"]
+    RAW_DIR   = cfg["MT5_DATA_DIR"]
+    PROC_DIR  = cfg["PROCESSED_DIR"]
+    MODEL_DIR = cfg["MODEL_DIR"]
+    REP_DIR   = cfg["REPORT_DIR"]
+    TOOLS     = cfg["TOOLS_DIR"]
 
-    default_symbol    = cfg["DEFAULT_SYMBOL"]
-    default_timeframe = cfg["DEFAULT_TIMEFRAME"]
-    default_bars      = cfg["DEFAULT_BARS"]
-    default_tp        = cfg["DEFAULT_TP"]
-    default_sl        = cfg["DEFAULT_SL"]
+    # コマンドラインで override できるようにしてもよいですが、ここは config.yaml 固定
+    tp = cfg["TP"]
+    sl = cfg["SL"]
+    spread     = cfg["SPREAD"]
+    commission = cfg["COMMISSION"]
+    slippage   = cfg["SLIPPAGE"]
 
-    # 2. Parse CLI args (optional overrides)
-    parser = argparse.ArgumentParser(description="Batch FX pipeline executor")
-    parser.add_argument("--symbols",    help="Comma-separated symbols (override config.yaml)")
-    parser.add_argument("--timeframes", help="Comma-separated timeframes (override config.yaml)")
-    parser.add_argument("--bars_list",  help="Comma-separated bars counts (override config.yaml)")
-    parser.add_argument("--tp",   type=int, help=f"TP pips (default {default_tp})")
-    parser.add_argument("--sl",   type=int, help=f"SL pips (default {default_sl})")
-    args = parser.parse_args()
-
-    symbols    = args.symbols.split(",")    if args.symbols    else [default_symbol]
-    timeframes = args.timeframes.split(",") if args.timeframes else [default_timeframe]
-    bars_list  = [int(x) for x in args.bars_list.split(",")] if args.bars_list else [default_bars]
-    tp = args.tp if args.tp is not None else default_tp
-    sl = args.sl if args.sl is not None else default_sl
-
-    # 3. Ensure output folders exist
-    for d in [PROCESSED_DIR, MODEL_DIR, REPORT_DIR]:
+    # フォルダ作成
+    for d in [PROC_DIR, MODEL_DIR, REP_DIR]:
         d.mkdir(parents=True, exist_ok=True)
 
-    # 4. Main loop
+    symbols    = [cfg.get("symbol")]
+    timeframes = [cfg.get("timeframe")]
+    bars_list  = [cfg.get("bars")]
+
     for symbol in symbols:
         for timeframe in timeframes:
             for bars in bars_list:
-                raw_csv = MT5_DATA_DIR / f"{symbol}_{timeframe}_{bars}.csv"
+                raw_csv = RAW_DIR / f"{symbol}_{timeframe}_{bars}.csv"
                 if not raw_csv.exists():
-                    print(f"⚠️ Raw data not found: {raw_csv}")
+                    print(f"⚠️ Raw not found: {raw_csv}")
                     continue
 
-                now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                base_name = f"{symbol}_{timeframe}_{bars}_{now}"
+                ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                base = f"{symbol}_{timeframe}_{bars}_{ts}"
 
-                # Step 1: Feature generation
-                feat_csv = PROCESSED_DIR / f"feat_{base_name}.csv"
-                if not feat_csv.exists():
-                    print(f"[INFO] Generating features: {feat_csv}")
+                # 1) Feature gen
+                feat = PROC_DIR / f"feat_{base}.csv"
+                if not feat.exists():
+                    print(f"[INFO] Generating features: {feat}")
                     subprocess.run([
-                        sys.executable,
-                        str(PROJECT_BASE / "src" / "data" / "feature_gen_full.py"),
+                        sys.executable, str(PB/"src"/"data"/"feature_gen_full.py"),
                         "--csv", str(raw_csv),
-                        "--out", str(feat_csv)
+                        "--out", str(feat)
                     ], check=True)
-                else:
-                    print(f"[INFO] SKIP: features exist: {feat_csv}")
 
-                # Step 2: Label generation
-                label_csv = PROCESSED_DIR / f"labeled_{base_name}.csv"
-                if not label_csv.exists():
-                    print(f"[INFO] Generating labels: {label_csv}")
+                # 2) Label gen
+                lab = PROC_DIR / f"labeled_{base}.csv"
+                if not lab.exists():
+                    print(f"[INFO] Generating labels (TP={tp}, SL={sl}): {lab}")
                     subprocess.run([
-                        sys.executable,
-                        str(PROJECT_BASE / "src" / "data" / "label_gen.py"),
-                        "--file", str(feat_csv),
-                        "--tp", str(tp),
-                        "--sl", str(sl),
-                        "--out", str(label_csv)
+                        sys.executable, str(PB/"src"/"data"/"label_gen.py"),
+                        "--file", str(feat),
+                        "--tp", str(tp), "--sl", str(sl),
+                        "--out", str(lab)
                     ], check=True)
-                else:
-                    print(f"[INFO] SKIP: labels exist: {label_csv}")
 
-                # Step 3: Auto feature selection
-                sel_feat_csv = PROCESSED_DIR / f"selfeat_{base_name}.csv"
-                if not sel_feat_csv.exists():
-                    print(f"[INFO] Selecting features: {sel_feat_csv}")
+                # 3) Auto feature selection
+                sel = PROC_DIR / f"selfeat_{base}.csv"
+                if not sel.exists():
+                    print(f"[INFO] Selecting features: {sel}")
                     subprocess.run([
-                        sys.executable,
-                        str(PROJECT_BASE / "src" / "data" / "auto_feature_selection.py"),
-                        "--csv", str(label_csv),
-                        "--out_dir", str(PROCESSED_DIR),
-                        "--out", str(sel_feat_csv),
+                        sys.executable, str(PB/"src"/"data"/"auto_feature_selection.py"),
+                        "--csv", str(lab),
+                        "--out_dir", str(PROC_DIR),
+                        "--out", str(sel),
                         "--window_size", "5000",
                         "--step", "500",
                         "--top_k", "10"
                     ], check=True)
-                else:
-                    print(f"[INFO] SKIP: selected features exist: {sel_feat_csv}")
 
-                # Step 4: Train model
-                model_pkl = MODEL_DIR / f"xgb_model_{base_name}.pkl"
-                feature_cols_json = MODEL_DIR / f"xgb_model_{base_name}_feature_cols.json"
+                # 4) Train model
+                model_pkl = MODEL_DIR / f"xgb_model_{base}.pkl"
+                feat_json = MODEL_DIR / f"xgb_model_{base}_feature_cols.json"
                 if not model_pkl.exists():
                     print(f"[INFO] Training model: {model_pkl}")
                     subprocess.run([
-                        sys.executable,
-                        str(PROJECT_BASE / "src" / "train_model.py"),
-                        "--file", str(sel_feat_csv),
+                        sys.executable, str(PB/"src"/"data"/"train_model.py"),
+                        "--file", str(sel),
                         "--model_out", str(model_pkl),
-                        "--feature_cols_out", str(feature_cols_json),
+                        "--feature_cols_out", str(feat_json),
                         "--test_size", "2000"
                     ], check=True)
-                else:
-                    print(f"[INFO] SKIP: model exists: {model_pkl}")
 
-                # Step 5: Evaluate model
-                eval_report = REPORT_DIR / f"eval_report_{base_name}.json"
-                if not eval_report.exists():
-                    print(f"[INFO] Evaluating model: {eval_report}")
+                # 5) Evaluate model
+                eval_json = REP_DIR / f"eval_report_{base}.json"
+                if not eval_json.exists():
+                    print(f"[INFO] Evaluating model: {eval_json}")
                     subprocess.run([
-                        sys.executable,
-                        str(PROJECT_BASE / "src" / "evaluate_model.py"),
-                        "--csv", str(sel_feat_csv),
+                        sys.executable, str(PB/"src"/"data"/"evaluate_model.py"),
+                        "--csv", str(sel),
                         "--model", str(model_pkl),
-                        "--out", str(eval_report),
+                        "--out", str(eval_json),
                         "--test_size", "2000"
                     ], check=True)
-                else:
-                    print(f"[INFO] SKIP: evaluation report exists: {eval_report}")
 
-                # Step 6: Backtest
-                bt_report = REPORT_DIR / f"backtest_{base_name}.json"
-                bt_curve  = REPORT_DIR / f"backtest_curve_{base_name}.png"
-                if not bt_report.exists() or not bt_curve.exists():
-                    print(f"[INFO] Running backtest: {bt_report}, {bt_curve}")
+                # 6) Backtest
+                bt_json  = REP_DIR / f"backtest_{base}.json"
+                bt_curve = REP_DIR / f"backtest_curve_{base}.png"
+                if not bt_json.exists() or not bt_curve.exists():
+                    print(f"[INFO] Running backtest: TP={tp}, SL={sl}, Spread={spread}, Comm={commission}, Slip={slippage}")
                     subprocess.run([
-                        sys.executable,
-                        str(PROJECT_BASE / "src" / "backtest.py"),
-                        "--csv", str(sel_feat_csv),
+                        sys.executable, str(PB/"src"/"backtest.py"),
+                        "--csv", str(sel),
                         "--model", str(model_pkl),
-                        "--report", str(bt_report),
-                        "--curve_out", str(bt_curve)
+                        "--report", str(bt_json),
+                        "--curve_out", str(bt_curve),
+                        "--tp_pips",   str(tp),
+                        "--sl_pips",   str(sl),
+                        "--spread",    str(spread),
+                        "--commission",str(commission),
+                        "--slippage",  str(slippage)
                     ], check=True)
-                else:
-                    print(f"[INFO] SKIP: backtest exists: {bt_report}, {bt_curve}")
 
-                # Step 7: Auto-organize
-                organize_log = REPORT_DIR / f"organize_{base_name}.log"
-                if not organize_log.exists():
+                # 7) Organize
+                log = REP_DIR / f"organize_{base}.log"
+                if not log.exists():
                     print("[INFO] Auto-organizing outputs")
                     subprocess.run([
-                        sys.executable,
-                        str(TOOLS_DIR / "auto_organize.py"),
+                        sys.executable, str(TOOLS / "auto_organize.py"),
                     ], check=True)
-                    organize_log.write_text("OK")
-                else:
-                    print(f"[INFO] SKIP: auto-organize log exists: {organize_log}")
+                    log.write_text("OK")
 
-                print(f"✅ Completed pipeline for {symbol} {timeframe} {bars}")
+                print(f"✅ {symbol} {timeframe} {bars}: Completed")
 
-    print("\n--- All pipelines completed! ---")
+    print("\n--- All done! ---")
 
 if __name__ == "__main__":
     main()

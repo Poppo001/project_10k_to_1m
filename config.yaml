@@ -13,6 +13,10 @@ symbol:    "USDJPY"
 timeframe: "H1"
 bars:      100000
 
-tp:        30
-sl:        30
+tp:        40
+sl:        20
+
+spread:      0.1
+commission:  0.1
+slippage:    0.5
 # ───────────────────────────────────────────────────────────────────
