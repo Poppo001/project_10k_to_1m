@@ -16,7 +16,7 @@ bars:      100000
 tp:        40
 sl:        20
 
-spread:      0.1
-commission:  0.1
-slippage:    0.5
+spread:      3
+commission:  0
+slippage:    10
 # ───────────────────────────────────────────────────────────────────
