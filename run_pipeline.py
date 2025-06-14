@@ -72,15 +72,14 @@ subprocess.run([
 ], check=True)
 
 # (4) 動的特徴量選択
-sel_feat_csv       = PROCESSED_DIR / f"selfeat_{base_name}.csv"
-selected_feats_json = PROCESSED_DIR / f"selected_feats_{base_name}.json"
-print(f"[INFO] 動的特徴量選択: {label_csv} → {sel_feat_csv} / {selected_feats_json}")
+sel_feat_csv = PROCESSED_DIR / f"selfeat_{base_name}.csv"
+print(f"[INFO] 動的特徴量選択: {label_csv} → {sel_feat_csv}")
 subprocess.run([
     sys.executable,
     str(PROJECT_BASE / "src" / "auto_feature_selection.py"),
     "--csv", str(label_csv),
-    "--out", str(sel_feat_csv),
-    "--feat_out", str(selected_feats_json)
+    "--out_dir", str(PROCESSED_DIR),
+    "--out", str(sel_feat_csv)
 ], check=True)
 
 # (5) モデル学習
