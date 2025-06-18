@@ -1,118 +1,141 @@
 #!/usr/bin/env python3
-# src/data/backtest.py
+
+# backtest.py
+
+# ───────────────────────────────────────────────────────────────────────────────
+
+# ネスト化ディレクトリ構成に対応し、config.yamlのパラメータをデフォルトとして
+
+# CLI引数(--tp\_pips等)での上書きも可能なリアルTP/SLバックテストスクリプト
+
+# ───────────────────────────────────────────────────────────────────────────────
 
 import argparse
+import json
+import yaml
+from pathlib import Path
 import pandas as pd
 import numpy as np
 import joblib
-import json
 import matplotlib.pyplot as plt
-from pathlib import Path
 
-# 日本語フォント設定（必要に応じて）
-plt.rcParams['font.family'] = 'MS Gothic'
+# --- 設定読み込み関数 ---
 
-def main():
-    parser = argparse.ArgumentParser(description="リアルTP/SL対応バックテスト")
-    parser.add_argument("--csv",       required=True, help="入力CSV（ラベル付）")
-    parser.add_argument("--model",     required=True, help="学習済モデル.pkl")
-    parser.add_argument("--report",    required=True, help="出力レポートJSON")
-    parser.add_argument("--curve_out", required=True, help="出力損益曲線PNG")
-    parser.add_argument("--tp_pips",    type=float, default=30.0, help="TP (pips)")
-    parser.add_argument("--sl_pips",    type=float, default=30.0, help="SL (pips)")
-    parser.add_argument("--spread",     type=float, default=0.2,  help="往復スプレッド (pips)")
-    parser.add_argument("--commission", type=float, default=0.1,  help="往復手数料 (pips)")
-    parser.add_argument("--slippage",   type=float, default=0.5,  help="スリッページ (pips)")
-    args = parser.parse_args()
+def load\_config():
+cfg = yaml.safe\_load(Path('config.yaml').read\_text(encoding='utf-8'))
+return cfg
 
-    # Paths
-    inp     = Path(args.csv)
-    mpath   = Path(args.model)
-    rpath   = Path(args.report)
-    curve_p = Path(args.curve_out)
+# --- メイン ---
 
-    # Checks
-    for p in [inp, mpath]:
-        if not p.exists():
-            print(f"[ERROR] ファイルが見つかりません: {p}")
-            return
-    rpath.parent.mkdir(parents=True, exist_ok=True)
-    curve_p.parent.mkdir(parents=True, exist_ok=True)
+def main():\
+# 引数パース
+parser = argparse.ArgumentParser(description='Real TP/SL Backtest')
+parser.add\_argument('--csv',       required=True, help='Processed feature CSV')
+parser.add\_argument('--model',     required=True, help='Trained model .pkl')
+parser.add\_argument('--report',    required=True, help='Output JSON report path')
+parser.add\_argument('--curve\_out', required=True, help='Output equity curve PNG path')
+parser.add\_argument('--tp\_pips',     type=float, help='Take Profit (pips), default from config.yaml')
+parser.add\_argument('--sl\_pips',     type=float, help='Stop Loss (pips), default from config.yaml')
+parser.add\_argument('--spread',      type=float, help='Spread cost (pips), default from config.yaml')
+parser.add\_argument('--commission',  type=float, help='Commission cost (pips), default from config.yaml')
+parser.add\_argument('--slippage',    type=float, help='Slippage cost (pips), default from config.yaml')
+args = parser.parse\_args()
 
-    # Load data & model
-    df = pd.read_csv(inp)
-    model = joblib.load(mpath)
+```
+# config.yaml 読込
+cfg = load_config()
+# パラメータ: CLI優先、未指定時はconfigから
+tp_pips     = args.tp_pips     if args.tp_pips     is not None else cfg['tp']
+sl_pips     = args.sl_pips     if args.sl_pips     is not None else cfg['sl']
+spread      = args.spread      if args.spread      is not None else cfg['spread']
+commission  = args.commission  if args.commission  is not None else cfg['commission']
+slippage    = args.slippage    if args.slippage    is not None else cfg['slippage']
 
-    # Load feature list
-    feat_json = mpath.with_name(mpath.stem + "_feature_cols.json")
-    with open(feat_json, 'r', encoding='utf-8') as f:
-        features = json.load(f)
+# 入力ファイルチェック
+csv_path   = Path(args.csv);
+model_path = Path(args.model)
+report_path= Path(args.report)
+curve_path = Path(args.curve_out)
 
-    # Prepare containers
-    equity = []
-    cum = 0.0
+# 出力フォルダ作成
+report_path.parent.mkdir(parents=True, exist_ok=True)
+curve_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # For each row, simulate trade based on TP/SL
-    for idx in range(len(df)-1):
-        entry_price = df.at[idx, "open"]  # 次バーの実オープン、または df.at[idx,"close"]
-        tp_price  = entry_price + args.tp_pips * 0.0001
-        sl_price  = entry_price - args.sl_pips * 0.0001
+# データ読み込み
+df = pd.read_csv(csv_path)
 
-        # Look ahead until TP or SL is hit
-        hit = None
-        for j in range(idx+1, len(df)):
-            high = df.at[j, "high"]
-            low  = df.at[j, "low"]
-            if high >= tp_price:
-                hit = args.tp_pips
-                break
-            if low <= sl_price:
-                hit = -args.sl_pips
-                break
-        if hit is None:
-            # Neither hit: close at last close
-            exit_price = df.at[len(df)-1, "close"]
-            hit = (exit_price - entry_price) / 0.0001
+# モデル & 特徴量リスト読み込み
+model = joblib.load(model_path)
+feat_cols_file = model_path.with_suffix('_feature_cols.json')
+feature_cols = json.loads(feat_cols_file.read_text(encoding='utf-8'))
 
-        # Adjust for spread, commission, slippage
-        net_pips = hit - args.spread - args.commission - args.slippage
-        cum += net_pips
-        equity.append(cum)
+# 特徴量欠損行除去
+df = df.dropna(subset=feature_cols).reset_index(drop=True)
 
-    # Save equity curve plot
-    plt.figure(figsize=(8,4))
-    plt.plot(equity, linewidth=1)
-    plt.title("資産曲線 (実TP/SL+スプレッド/手数料/スリッページ考慮)")
-    plt.xlabel("トレード番号")
-    plt.ylabel("累積獲得 pips")
-    plt.tight_layout()
-    plt.savefig(curve_p)
-    plt.close()
+# 確率予測 → シグナル
+X = df[feature_cols]
+df['prob']   = model.predict_proba(X)[:, 1]
+df['signal'] = (df['prob'] > 0.5).astype(int)
 
-    # Compute metrics
-    cumulative_pips = cum
-    running_max     = np.maximum.accumulate(equity)
-    drawdowns       = running_max - equity
-    max_dd          = float(np.max(drawdowns))
+# バックテスト実行
+equity = []
+eq = 0.0
+trades = []
+for _, row in df.iterrows():
+    if row['signal'] == 1:
+        # エントリー価格: open + half spread
+        entry = row['open'] + spread / 2
+        high  = row['high']
+        low   = row['low']
+        # TP/SL判定
+        if high >= entry + tp_pips:
+            profit = tp_pips
+        elif low <= entry - sl_pips:
+            profit = -sl_pips
+        else:
+            profit = row['close'] - entry
+        # コスト控除
+        profit = profit - commission - slippage
+    else:
+        profit = 0.0
+    eq += profit
+    trades.append(profit)
+    equity.append(eq)
 
-    print(f"[INFO] 累積獲得pips: {cumulative_pips:.2f}")
-    print(f"[INFO] 最大ドローダウン: {max_dd:.2f}")
+df['trade_pips'] = trades
+df['equity']     = equity
 
-    # Report JSON
-    report = {
-        "cumulative_pips": cumulative_pips,
-        "max_drawdown":    max_dd,
-        "n_trades":        len(equity),
-        "tp_pips":         args.tp_pips,
-        "sl_pips":         args.sl_pips,
-        "spread":          args.spread,
-        "commission":      args.commission,
-        "slippage":        args.slippage
-    }
-    with open(rpath, "w", encoding="utf-8") as f:
-        json.dump(report, f, ensure_ascii=False, indent=2)
+# メトリクス計算
+cumulative_pips = float(eq)
+running_max     = np.maximum.accumulate(equity)
+drawdowns       = running_max - equity
+max_drawdown    = float(np.max(drawdowns))
+n_trades        = int((df['signal'] == 1).sum())
 
-    print(f"[INFO] バックテストレポートを保存: {rpath}")
+# 資産曲線プロット
+plt.figure()
+plt.plot(equity)
+plt.title('Equity Curve')
+plt.xlabel('Trade #')
+plt.ylabel('Cumulative Pips')
+plt.tight_layout()
+plt.savefig(curve_path)
+plt.close()
 
-if __name__ == "__main__":
-    main()
+# レポート保存
+report = {
+    'cumulative_pips': cumulative_pips,
+    'max_drawdown':    max_drawdown,
+    'n_trades':        n_trades,
+    'tp_pips':         tp_pips,
+    'sl_pips':         sl_pips,
+    'spread':          spread,
+    'commission':      commission,
+    'slippage':        slippage
+}
+report_path.write_text(json.dumps(report, indent=2), encoding='utf-8')
+print(f"[INFO] Report saved: {report_path}")
+```
+
+if **name** == '**main**':
+main()

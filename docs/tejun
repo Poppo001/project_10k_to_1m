@@ -13,22 +13,23 @@ MT5からデータ取得（get_mt5_ohlcv.py）
 
 🚩 実行方法の手順（推奨ワークフロー）
 ローソク足データ取得
-
 bash
 コードをコピーする
 python src/data/get_mt5_ohlcv.py
-特徴量生成（テクニカル指標付き）
 
+特徴量生成（テクニカル指標付き）
 bash
 コードをコピーする
 python src/data/feature_gen_full.py
 
 ラベル生成
 bash
+コードをコピーする
 python src/data/label_gen.py
 
 動的特徴量選択・再学習
 bash
+コードをコピーする
 python src/auto_feature_selection.py
 
 バックテスト評価
