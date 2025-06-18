@@ -1,23 +1,17 @@
-# project_10k_to_1m/config.yaml
+# config.yaml
 
-# ── プロジェクト & データ基本設定 ──────────────────────────────
-project_base: "."                         # スクリプトルート
-data_base:    "../project_10k_to_1m_data"  # データリポジトリ
+symbols:
+  - USDJPY
 
-mt5_data_dir:  "${data_base}/raw"        # MT5 からダウンロード済みの生データ置き場
-processed_dir: "${data_base}/processed"  # 特徴量生成／ラベル付与後のデータ置き場
-model_dir:     "${data_base}/models"     # 学習済みモデル保管場所
-report_dir:    "${data_base}/reports"    # 各種レポート出力先
+timeframes:
+  - M5
 
-# ── テスト対象通貨ペア & 条件 ─────────────────────────────────
-symbol:    "USDJPY"    # 通貨ペア（MT5 のファイル名と合わせる）
-timeframe: "H1"        # 時間足（例: M5, M15, H1, H4 など）
-bars:      100000      # 使用するバー数
+bars_list:
+  - 100000
 
-# ── バックテスト & モデル評価 パラメータ ────────────────────────
-tp:        140.0   # テイクプロフィット(pips)
-sl:        10.0   # ストップロス(pips)
+# 保存先ルートパス（環境自動切替対応）
+data_root_local: C:/Projects/project_10k_to_1m_data
+data_root_colab: project_10k_to_1m_data  # Google Drive の MyDrive 直下に置く想定
 
-spread:      3 # スプレッド(pips換算)
-commission:  0  # 手数料(pips換算)
-slippage:    10  # スリッページ(pips換算)
+tp_default: 140
+sl_default: 10
