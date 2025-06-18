@@ -1,11 +1,17 @@
 # src/models/train_model.py
 
+import sys
+from pathlib import Path
+
+# ✅ プロジェクトルートを sys.path に追加
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from utils.common import load_config, resolve_data_root
+
 import pandas as pd
 import argparse, json, pickle
 from sklearn.model_selection import train_test_split
 from xgboost import XGBClassifier
-from pathlib import Path
-from utils.common import load_config, resolve_data_root
 
 def main():
     parser = argparse.ArgumentParser()
@@ -24,8 +30,8 @@ def main():
     df = df.dropna()
 
     # 学習
-    X = df.drop(columns=["time", "label"])
-    y = df["label"]
+    X = df.drop(columns=["time", "label"]) if "label" in df.columns else df.drop(columns=["time"])
+    y = df["label"] if "label" in df.columns else (df["return"] > 0).astype(int)  # fallback
     X_train, X_test, y_train, y_test = train_test_split(X, y, shuffle=False, test_size=0.2)
 
     model = XGBClassifier(use_label_encoder=False, eval_metric="logloss")
