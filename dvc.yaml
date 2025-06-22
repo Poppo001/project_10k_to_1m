@@ -1,0 +1,20 @@
+# project_root/dvc.yaml
+
+stages:
+  fetch_raw:
+    cmd: >
+      python src/data/fetch_mt5_ohlcv.py
+      --symbol ${symbol}
+      --timeframe ${timeframe}
+      --bars ${bars}
+      --out data/raw/$(date +"${raw_data_date_format}")_${symbol}_${timeframe}_${bars}.csv
+    deps:
+      - src/data/fetch_mt5_ohlcv.py
+      - config.yaml
+    params:
+      - symbol
+      - timeframe
+      - bars
+      - raw_data.date_format
+    outs:
+      - data/raw/$(date +"${raw_data_date_format}")_${symbol}_${timeframe}_${bars}.csv

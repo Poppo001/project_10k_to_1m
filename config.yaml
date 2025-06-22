@@ -1,17 +1,38 @@
-# config.yaml
+# project_root/config.yaml
 
-symbols:
-  - USDJPY
+# ─── ディレクトリ設定 ──────────────────────────────────────
+data_base: "data"
+project_base: "."
+mt5_data_dir: "${data_base}/raw"
+processed_dir: "${data_base}/processed"
+model_dir: "${data_base}/processed/models"
+report_dir: "${data_base}/processed/reports"
 
-timeframes:
-  - M5
+# ─── 通貨ペア／時間軸／データ本数 ─────────────────────────
+symbol: "USDJPY"
+timeframe: "M5"
+bars: 100000
 
-bars_list:
-  - 100000
+# ─── ラグ付け／ラベル生成パラメータ ────────────────────────
+label_gen:
+  tp: 30
+  sl: 30
+  # 経済指標発表前除外フラグ
+  exclude_before_release: true
+  # 発表前除外のウィンドウ（分）
+  release_exclude_window_mins: 30
 
-# 保存先ルートパス（環境自動切替対応）
-data_root_local: C:/Projects/project_10k_to_1m_data
-data_root_colab: project_10k_to_1m_data  # Google Drive の MyDrive 直下に置く想定
+# ─── 生データ命名ルール ───────────────────────────────────
+raw_data:
+  # ファイル名に使う日付フォーマット
+  date_format: "%Y%m%d"
+  # 例: 20250623_USDJPY_M5_100000.csv
 
-tp_default: 140
-sl_default: 10
+# ─── 実行フェーズ制御（run_pipeline.py 用）──────────────────
+run_phases: [1,2,3,4]
+
+# ─── MT5 接続設定 ────────────────────────────────────────
+mt5:
+  path: "C:\\Program Files\\MetaTrader 5\\terminal64.exe"
+  login: 123456
+  password: "your_password_here"

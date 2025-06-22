@@ -1,3 +1,5 @@
+# src/data/feature_gen_full.py
+
 import argparse
 from pathlib import Path
 import pandas as pd
@@ -37,7 +39,7 @@ def main():
         print(f"[ERROR] 入力ファイルが見つかりません: {input_path}")
         return
 
-    # 出力先フォルダがなければ作成
+    # 出力先ディレクトリがなければ作成
     output_dir = output_path.parent
     if not output_dir.exists():
         output_dir.mkdir(parents=True, exist_ok=True)
