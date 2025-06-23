@@ -1,32 +1,28 @@
 # project_root/config.yaml
 
 # ─── ディレクトリ設定 ──────────────────────────────────────
-data_base: "data"
-project_base: "."
+data_base: "C:/project/project_10k_to_1m_data"
+project_base: "C:/project/project_10k_to_1m"
 mt5_data_dir: "${data_base}/raw"
 processed_dir: "${data_base}/processed"
-model_dir: "${data_base}/processed/models"
-report_dir: "${data_base}/processed/reports"
+model_dir: "${processed_dir}/models"
+report_dir: "${processed_dir}/reports"
 
 # ─── 通貨ペア／時間軸／データ本数 ─────────────────────────
 symbol: "USDJPY"
 timeframe: "M5"
 bars: 100000
 
-# ─── ラグ付け／ラベル生成パラメータ ────────────────────────
+# ─── ラベル生成パラメータ ─────────────────────────────────
 label_gen:
-  tp: 30
-  sl: 30
-  # 経済指標発表前除外フラグ
+  tp: 140
+  sl: 10
   exclude_before_release: true
-  # 発表前除外のウィンドウ（分）
   release_exclude_window_mins: 30
 
 # ─── 生データ命名ルール ───────────────────────────────────
 raw_data:
-  # ファイル名に使う日付フォーマット
   date_format: "%Y%m%d"
-  # 例: 20250623_USDJPY_M5_100000.csv
 
 # ─── 実行フェーズ制御（run_pipeline.py 用）──────────────────
 run_phases: [1,2,3,4]
