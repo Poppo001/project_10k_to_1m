@@ -1,8 +1,8 @@
 # project_root/config.yaml
 
 # ─── ディレクトリ設定 ──────────────────────────────────────
-data_base: "C:/project/project_10k_to_1m_data"
-project_base: "C:/project/project_10k_to_1m"
+data_base: "C:/projects/project_10k_to_1m_data"
+project_base: "C:/projects/project_10k_to_1m"
 mt5_data_dir: "${data_base}/raw"
 processed_dir: "${data_base}/processed"
 model_dir: "${processed_dir}/models"
@@ -30,5 +30,5 @@ run_phases: [1,2,3,4]
 # ─── MT5 接続設定 ────────────────────────────────────────
 mt5:
   path: "C:\\Program Files\\MetaTrader 5\\terminal64.exe"
-  login: 123456
-  password: "your_password_here"
+  login: 70042530
+  password: 2090XM_torihiki

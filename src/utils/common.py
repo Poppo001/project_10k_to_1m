@@ -15,7 +15,8 @@ def load_config() -> dict:
 
 def resolve_path(template: str, cfg: dict) -> Path:
     """
-    config.yaml 内のパス文字列（"${data_base}/raw" など）を解決して Path で返す
+    config.yaml 内のパス文字列（"${data_base}/raw" など）を
+    実際のディレクトリパス(Path)に展開して返す
     """
     path_str = template
     for key, val in cfg.items():
