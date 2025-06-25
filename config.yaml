@@ -1,8 +1,8 @@
 # project_root/config.yaml
 
 # ─── ディレクトリ設定 ──────────────────────────────────────
-data_base: "C:/projects/project_10k_to_1m_data"
-project_base: "C:/projects/project_10k_to_1m"
+data_base_local: "C:/Projects/project_10k_to_1m_data"
+data_base_colab: "/content/drive/MyDrive/project_10k_to_1m_data"
 mt5_data_dir: "${data_base}/raw"
 processed_dir: "${data_base}/processed"
 model_dir: "${processed_dir}/models"
