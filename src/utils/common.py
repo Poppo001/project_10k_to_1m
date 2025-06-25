@@ -7,31 +7,39 @@ from pathlib import Path
 
 def is_colab_env() -> bool:
     """
-    実行環境が Google Colab 上かどうかを判定。
+    Google Colab 上で走っているかどうか判定
     """
     return 'google.colab' in sys.modules
 
 def load_config() -> dict:
     """
-    プロジェクトルートの config.yaml を読み込み、
-    Colab 実行時は data_base を Drive 上のパスに上書きした設定辞書を返す。
+    config.yaml を読み込んで辞書を返す。
+    Colab 実行時には data_base と関連ディレクトリを Drive 上のパスに上書き。
     """
-    # config.yaml の場所を特定
+    # 1) config.yaml の読み込み
     root = Path(__file__).resolve().parents[2]
     cfg_path = root / "config.yaml"
     cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
 
-    # Colab で走らせる場合のみ data_base を Drive の実パスに書き換え
+    # 2) Colab 環境なら data_base を Drive のマウント先に置き換え
     if is_colab_env():
-        cfg['data_base'] = '/content/drive/MyDrive/project_10k_to_1m_data'
+        # Google Drive 上の project_10k_to_1m_data を指定
+        drive_data = '/content/drive/MyDrive/project_10k_to_1m_data'
+        cfg['data_base'] = drive_data
+
+    # 3) data_base を基に各ディレクトリの絶対パス文字列を再構築
+    #    （config.yaml 内に "${data_base}/raw" などテンプレートで書かれている前提）
+    cfg['mt5_data_dir']   = f"{cfg['data_base']}/raw"
+    cfg['processed_dir']  = f"{cfg['data_base']}/processed"
+    cfg['model_dir']      = f"{cfg['processed_dir']}/models"
+    cfg['report_dir']     = f"{cfg['processed_dir']}/reports"
 
     return cfg
 
 def resolve_path(template: str, cfg: dict) -> Path:
     """
-    config.yaml 中の "${key}" プレースホルダを
-    設定値に展開して実際の Path を返す。
-    例: template="${data_base}/raw" → "/content/drive/.../raw"
+    config.yaml 内の "${key}" プレースホルダを設定値で展開し、
+    実際のディレクトリ Path を返す。
     """
     path_str = template
     for key, val in cfg.items():
