@@ -1,8 +1,17 @@
 # project_root/config.yaml
 
 # ─── ディレクトリ設定 ──────────────────────────────────────
+# project_root/config.yaml
+
+# ⇒ ローカル用データベースパス
 data_base_local: "C:/Projects/project_10k_to_1m_data"
+
+# ⇒ Colab用データベースパス
 data_base_colab: "/content/drive/MyDrive/project_10k_to_1m_data"
+
+# デフォルトはローカル
+data_base: "${data_base_local}"
+
 mt5_data_dir: "${data_base}/raw"
 processed_dir: "${data_base}/processed"
 model_dir: "${processed_dir}/models"
