@@ -3,15 +3,14 @@
 # ─── ディレクトリ設定 ──────────────────────────────────────
 # project_root/config.yaml
 
-# ⇒ ローカル用データベースパス
+# ─── データベースパス（ローカル／Colab 用を両方定義）──────────
 data_base_local: "C:/Projects/project_10k_to_1m_data"
-
-# ⇒ Colab用データベースパス
 data_base_colab: "/content/drive/MyDrive/project_10k_to_1m_data"
 
-# デフォルトはローカル
+# 現状はローカル向けを参照
 data_base: "${data_base_local}"
 
+# ─── 各ディレクトリは必ず "${data_base}/…" の形式で書く──────────
 mt5_data_dir: "${data_base}/raw"
 processed_dir: "${data_base}/processed"
 model_dir: "${processed_dir}/models"
