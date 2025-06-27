@@ -59,19 +59,29 @@ def main():
         DRIVE     = Path("/content/drive/MyDrive")
         CODE_DIR  = DRIVE / "project_10k_to_1m"
         DATA_DIR  = DRIVE / "project_10k_to_1m_data"
-        raw_dir    = DATA_DIR / "raw"
+        # ── raw_dir をサブフォルダ化 ──
+        raw_base   = DATA_DIR / "raw"
         proc_dir   = DATA_DIR / "processed"
         model_dir  = DATA_DIR / "processed" / "models"
         report_dir = DATA_DIR / "processed" / "reports"
     else:
-        raw_dir    = resolve_path(cfg["mt5_data_dir"],   cfg)
+        # ローカル：config.yaml 由来のパスを展開
+        raw_base   = resolve_path(cfg["mt5_data_dir"],   cfg)
         proc_dir   = resolve_path(cfg["processed_dir"],  cfg)
         model_dir  = resolve_path(cfg["model_dir"],      cfg)
         report_dir = resolve_path(cfg["report_dir"],     cfg)
         CODE_DIR   = Path().resolve()
 
-    # 6) Phase1：生データ取得→特徴量→ラベル→特徴量選択
+    # 各フェーズで使う raw_dir はサブフォルダ化
+    raw_dir = raw_base / symbol / timeframe
+
+    # Phase1：生データ取得→特徴量→ラベル→特徴量選択
     if 1 in phases:
+        # raw_dir 自体を確認・作成
+        if not raw_dir.exists():
+            print(f"[ERROR] raw directory does not exist: {raw_dir}")
+            sys.exit(1)
+
         # 6-1) タイムスタンプ前後両対応でファイル一覧を取得
         candidates = sorted(raw_dir.glob(f"*_{symbol}_{timeframe}_{bars}.csv"))
         if not candidates:
@@ -101,8 +111,8 @@ def main():
             "--file", str(feat_out),
             "--tp",   str(tp),
             "--sl",   str(sl),
-            "--exclude_before_release",          str(excl),
-            "--release_exclude_window_mins",     str(excl_w),
+            "--exclude_before_release",      str(excl),
+            "--release_exclude_window_mins", str(excl_w),
             "--out",  str(lab_out)
         ])
 
@@ -118,7 +128,7 @@ def main():
             "--top_k",       "10"
         ])
 
-    # 7) Phase2：ベースライン構築 (Logistic Regression)
+    # Phase2：ベースライン構築 (Logistic Regression)
     if 2 in phases:
         lab_csv = proc_dir / symbol / timeframe / f"labeled_{symbol}_{timeframe}_{bars}.csv"
         run([
@@ -127,7 +137,7 @@ def main():
             "--csv", str(lab_csv)
         ])
 
-    # 8) Phase3：ブースト木モデル学習 + 特徴量ファイル出力
+    # Phase3：ブースト木モデル学習 + 特徴量ファイル出力
     if 3 in phases:
         sel_csv   = proc_dir / symbol / timeframe / f"selfeat_{symbol}_{timeframe}_{bars}.csv"
         model_out = model_dir / f"xgb_model_{symbol}_{timeframe}_{bars}.pkl"
@@ -135,12 +145,12 @@ def main():
         run([
             sys.executable,
             str(CODE_DIR/"src"/"models"/"train_model.py"),
-            "--file",                 str(sel_csv),
-            "--model_out",            str(model_out),
-            "--feature_cols_out",     str(feat_out)
+            "--file",             str(sel_csv),
+            "--model_out",        str(model_out),
+            "--feature_cols_out", str(feat_out)
         ])
 
-    # 9) Phase4：バックテスト
+    # Phase4：バックテスト
     if 4 in phases:
         run([
             sys.executable,

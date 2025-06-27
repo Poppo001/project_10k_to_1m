@@ -45,16 +45,18 @@ def main():
     else:
         mt5.initialize()
 
-    # 4) 出力先ディレクトリを config で解決
-    raw_dir = resolve_path(cfg["mt5_data_dir"], cfg)
+    # 4) 設定ファイルの mt5_data_dir ("${data_base}/raw") を展開
+    base_raw_dir = resolve_path(cfg["mt5_data_dir"], cfg)
+    # 5) 通貨ペア／時間足サブフォルダを作成
+    raw_dir = base_raw_dir / symbol / timeframe
     raw_dir.mkdir(parents=True, exist_ok=True)
 
-    # 5) ファイル名にタイムスタンプを付与
+    # 6) ファイル名にタイムスタンプを付与
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_fname = f"{symbol}_{timeframe}_{bars}_{ts}.csv"
     out_path = raw_dir / out_fname
 
-    # 6) timeframe マッピング
+    # 7) timeframe マッピング
     tf_map = {
         "M1": mt5.TIMEFRAME_M1,   "M5": mt5.TIMEFRAME_M5,
         "M15": mt5.TIMEFRAME_M15, "M30": mt5.TIMEFRAME_M30,
@@ -68,14 +70,14 @@ def main():
         mt5.shutdown()
         sys.exit(1)
 
-    # 7) データ取得
+    # 8) データ取得
     rates = mt5.copy_rates_from_pos(symbol, tf, 0, bars)
     if rates is None or len(rates) == 0:
         print(f"[ERROR] Failed to fetch data for {symbol} {timeframe}")
         mt5.shutdown()
         sys.exit(1)
 
-    # 8) DataFrame 化して CSV 出力
+    # 9) DataFrame 化して CSV 出力
     df = pd.DataFrame(rates)
     df["time"] = pd.to_datetime(df["time"], unit="s")
     df = df[["time", "open", "high", "low", "close", "tick_volume"]]

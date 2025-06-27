@@ -20,7 +20,7 @@ report_dir: "${processed_dir}/reports"
 # ─── 通貨ペア／時間軸／データ本数 ─────────────────────────
 symbol: "USDJPY"
 timeframe: "M5"
-bars: 100000
+bars: 500000
 
 # ─── ラベル生成パラメータ ─────────────────────────────────
 label_gen:
