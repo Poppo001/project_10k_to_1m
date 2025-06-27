@@ -8,37 +8,43 @@ import os
 from pathlib import Path
 
 def is_colab() -> bool:
-    """Colab上（Driveマウント直下）で動作しているか判定。"""
+    """
+    Colab上（Driveマウント直下）で動作しているか判定。
+    """
     return os.getcwd().startswith("/content/drive/MyDrive")
 
 def run(cmd: list):
+    """
+    外部スクリプトを実行するユーティリティ
+    """
     print(f"[RUN] {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
 
 def main():
+    # 1) 引数パース
     parser = argparse.ArgumentParser(description="Run Phases 1–4")
     parser.add_argument(
         "--phase",
         default=None,
-        help="実行するフェーズ(例:1,1-3,2-4;未指定は全フェーズ)"
+        help="実行するフェーズ(例:1,1-3,2-4; 未指定はconfig.yamlのrun_phases)"
     )
     args = parser.parse_args()
 
-    # まず常に config.yaml を読み込んでパラメータ取得
+    # 2) 設定ファイル読み込み
     from src.utils.common import load_config, resolve_path
     cfg = load_config()
 
-    # パラメータ
+    # 3) パラメータ取得
     symbol    = cfg["symbol"]
     timeframe = cfg["timeframe"]
     bars      = cfg["bars"]
-    # label_gen パラメータ
-    tp    = cfg["label_gen"]["tp"]
-    sl    = cfg["label_gen"]["sl"]
-    excl  = cfg["label_gen"]["exclude_before_release"]
-    excl_w = cfg["label_gen"]["release_exclude_window_mins"]
+    tp        = cfg["label_gen"]["tp"]
+    sl        = cfg["label_gen"]["sl"]
+    excl      = cfg["label_gen"]["exclude_before_release"]
+    excl_w    = cfg["label_gen"]["release_exclude_window_mins"]
+    default_phases = cfg.get("run_phases", [1,2,3,4])
 
-    # 実行フェーズのデフォルト
+    # 4) フェーズ指定を解釈
     if args.phase:
         if "-" in args.phase:
             s, e = args.phase.split("-")
@@ -46,9 +52,9 @@ def main():
         else:
             phases = [int(x) for x in args.phase.split(",")]
     else:
-        phases = cfg.get("run_phases", [1,2,3,4])
+        phases = default_phases
 
-    # 実行環境でコード＆データのルートを決定
+    # 5) 実行環境によるパス決定
     if is_colab():
         DRIVE     = Path("/content/drive/MyDrive")
         CODE_DIR  = DRIVE / "project_10k_to_1m"
@@ -64,82 +70,84 @@ def main():
         report_dir = resolve_path(cfg["report_dir"],     cfg)
         CODE_DIR   = Path().resolve()
 
-    # ── Phase1: 生データ取得 → 特徴量生成 → ラベル生成 → 特徴量選択 ──
+    # 6) Phase1：生データ取得→特徴量→ラベル→特徴量選択
     if 1 in phases:
-        # タイムスタンプ付き or なし 両対応で CSV 検索
+        # 6-1) タイムスタンプ前後両対応でファイル一覧を取得
         candidates = sorted(raw_dir.glob(f"*_{symbol}_{timeframe}_{bars}.csv"))
         if not candidates:
-            candidates = sorted(raw_dir.glob(f"{symbol}_{timeframe}_{bars}.csv"))
+            candidates = sorted(raw_dir.glob(f"{symbol}_{timeframe}_{bars}_*.csv"))
         if not candidates:
-            print(f"[ERROR] No raw CSV in {raw_dir} matching")
+            print(f"[ERROR] No raw CSV in {raw_dir} matching "
+                  f"*_{symbol}_{timeframe}_{bars}.csv or "
+                  f"{symbol}_{timeframe}_{bars}_*.csv")
             sys.exit(1)
         raw_csv = candidates[-1]
         print(f"[INFO] Using raw CSV: {raw_csv}")
 
-        # 1-1) 特徴量生成
-        feat = proc_dir / symbol / timeframe / f"feat_{symbol}_{timeframe}_{bars}.csv"
+        # 6-2) feature_gen.py 実行
+        feat_out = proc_dir / symbol / timeframe / f"feat_{symbol}_{timeframe}_{bars}.csv"
         run([
             sys.executable,
             str(CODE_DIR/"src"/"data"/"feature_gen.py"),
             "--csv", str(raw_csv),
-            "--out", str(feat)
+            "--out", str(feat_out)
         ])
 
-        # 1-2) ラベル生成
-        lab = proc_dir / symbol / timeframe / f"labeled_{symbol}_{timeframe}_{bars}.csv"
+        # 6-3) label_gen.py 実行
+        lab_out = proc_dir / symbol / timeframe / f"labeled_{symbol}_{timeframe}_{bars}.csv"
         run([
             sys.executable,
             str(CODE_DIR/"src"/"data"/"label_gen.py"),
-            "--file", str(feat),
+            "--file", str(feat_out),
             "--tp",   str(tp),
             "--sl",   str(sl),
-            "--exclude_before_release",  str(excl),
-            "--release_exclude_window_mins", str(excl_w),
-            "--out",  str(lab)
+            "--exclude_before_release",          str(excl),
+            "--release_exclude_window_mins",     str(excl_w),
+            "--out",  str(lab_out)
         ])
 
-        # 1-3) 自動特徴量選択
-        sel = proc_dir / symbol / timeframe / f"selfeat_{symbol}_{timeframe}_{bars}.csv"
+        # 6-4) auto_feature_selection.py 実行
+        sel_out = proc_dir / symbol / timeframe / f"selfeat_{symbol}_{timeframe}_{bars}.csv"
         run([
             sys.executable,
             str(CODE_DIR/"src"/"data"/"auto_feature_selection.py"),
-            "--csv", str(lab),
-            "--out", str(sel),
+            "--csv", str(lab_out),
+            "--out", str(sel_out),
             "--window_size", "5000",
-            "--step", "500",
-            "--top_k", "10"
+            "--step",        "500",
+            "--top_k",       "10"
         ])
 
-    # ── Phase2: ベースライン構築 (Logistic Regression) ──
+    # 7) Phase2：ベースライン構築 (Logistic Regression)
     if 2 in phases:
-        lab = proc_dir / symbol / timeframe / f"labeled_{symbol}_{timeframe}_{bars}.csv"
+        lab_csv = proc_dir / symbol / timeframe / f"labeled_{symbol}_{timeframe}_{bars}.csv"
         run([
             sys.executable,
             str(CODE_DIR/"src"/"models"/"train_baseline.py"),
-            "--csv", str(lab)
+            "--csv", str(lab_csv)
         ])
 
-    # ── Phase3: ブースト木モデル学習 ──
+    # 8) Phase3：ブースト木モデル学習 + 特徴量ファイル出力
     if 3 in phases:
-        sel = proc_dir / symbol / timeframe / f"selfeat_{symbol}_{timeframe}_{bars}.csv"
+        sel_csv   = proc_dir / symbol / timeframe / f"selfeat_{symbol}_{timeframe}_{bars}.csv"
         model_out = model_dir / f"xgb_model_{symbol}_{timeframe}_{bars}.pkl"
-        feat_cols = model_dir / f"xgb_model_{symbol}_{timeframe}_{bars}_features.json"
+        feat_out  = model_dir / f"xgb_model_{symbol}_{timeframe}_{bars}_features.json"
         run([
             sys.executable,
             str(CODE_DIR/"src"/"models"/"train_model.py"),
-            "--file", str(sel),
-            "--model_out", str(model_out),
-            "--feature_cols_out", str(feat_cols)
+            "--file",                 str(sel_csv),
+            "--model_out",            str(model_out),
+            "--feature_cols_out",     str(feat_out)
         ])
 
-    # ── Phase4: バックテスト ──
+    # 9) Phase4：バックテスト
     if 4 in phases:
         run([
             sys.executable,
             str(CODE_DIR/"src"/"models"/"backtest.py"),
-            "--symbol", symbol,
+            "--symbol",    symbol,
             "--timeframe", timeframe,
-            "--bars", str(bars)
+            "--bars",      str(bars)
         ])
 
     print("\n--- All done! ---")
