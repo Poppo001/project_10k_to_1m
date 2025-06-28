@@ -21,7 +21,6 @@ report_dir: "${processed_dir}/reports"
 symbol: "USDJPY"
 timeframe: "M5"
 bars: 500000
-
 # ─── ラベル生成パラメータ ─────────────────────────────────
 label_gen:
   tp: 140
