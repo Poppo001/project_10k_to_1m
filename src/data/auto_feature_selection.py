@@ -4,7 +4,6 @@
 import argparse
 import pandas as pd
 import numpy as np
-import joblib
 import time
 from pathlib import Path
 from sklearn.ensemble import RandomForestClassifier
@@ -16,24 +15,24 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Auto Feature Selection via RandomForest + SHAP"
     )
-    parser.add_argument("--csv",       required=True,
+    parser.add_argument("--csv",         required=True,
                         help="ラベル付き CSV ファイルパス")
-    parser.add_argument("--out_dir",   required=True,
+    parser.add_argument("--out_dir",     required=True,
                         help="出力ディレクトリ")
-    parser.add_argument("--out",       required=True,
+    parser.add_argument("--out",         required=True,
                         help="選択特徴量付き CSV 出力パス")
     parser.add_argument("--window_size", type=int, default=5000,
                         help="チャンク学習ウィンドウサイズ")
-    parser.add_argument("--step",       type=int, default=500,
+    parser.add_argument("--step",        type=int, default=500,
                         help="チャンクステップ（SHAP描画用）")
-    parser.add_argument("--top_k",      type=int, default=10,
+    parser.add_argument("--top_k",       type=int, default=10,
                         help="選択する特徴量数")
     parser.add_argument("--sample_frac", type=float, default=1.0,
                         help="サンプリング比率（0<α≤1）")
     return parser.parse_args()
 
 def main():
-    args = parse_args()
+    args     = parse_args()
     csv_path = Path(args.csv)
     out_dir  = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -63,42 +62,59 @@ def main():
         total_rows = len(X)
         print(f"[INFO] After sampling: {total_rows} rows")
 
-    # 学習/検証分割（ベースライン用テスト分を確保）
+    # 学習/検証分割
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=min(2000, total_rows//10), random_state=42
     )
 
     # モデル学習
     print("[INFO] Training RandomForestClassifier...")
-    t0 = time.time()
-    model = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
+    t0    = time.time()
+    model = RandomForestClassifier(n_estimators=100,
+                                   random_state=42,
+                                   n_jobs=-1)
     model.fit(X_train, y_train)
     elapsed = time.time() - t0
     print(f"[INFO] RF trained in {elapsed:.1f}s")
 
     # SHAP 計算（tqdmでプログレスバー表示）
     print("[INFO] Starting SHAP calculation...")
-    explainer = shap.TreeExplainer(model)
+    explainer       = shap.TreeExplainer(model)
+    n_features      = X.shape[1]
+    shap_vals       = np.zeros((total_rows, n_features), dtype=float)
+    chunk_size      = args.window_size
 
-    n_features = X.shape[1]
-    shap_vals = np.zeros((total_rows, n_features), dtype=float)
-    chunk_size = args.window_size
+    for start in tqdm(range(0, total_rows, chunk_size),
+                      desc="SHAP calc chunks"):
+        end    = min(start + chunk_size, total_rows)
+        batch  = X.iloc[start:end]
 
-    # tqdm でイテレーション
-    for start in tqdm(range(0, total_rows, chunk_size), desc="SHAP calc chunks"):
-        end = min(start + chunk_size, total_rows)
-        batch = X.iloc[start:end]
-        # pos クラスの shap 値を取得
-        batch_shap = explainer.shap_values(batch)[1]
+        # shap_values の返り値を取得
+        raw_shap = explainer.shap_values(batch)
+        # binary 分類なら list で返るので positive クラスを抽出
+        batch_shap = raw_shap[1] if isinstance(raw_shap, list) else raw_shap
+
+        # shape=(n_features, n_rows) の場合は転置
+        rows  = end - start
+        if batch_shap.shape == (n_features, rows):
+            batch_shap = batch_shap.T
+
+        # 期待する形状でなければ例外
+        if batch_shap.shape != (rows, n_features):
+            raise ValueError(
+                f"[ERROR] SHAP array has wrong shape {batch_shap.shape}, "
+                f"expected {(rows, n_features)}"
+            )
+
         shap_vals[start:end, :] = batch_shap
 
     # 特徴量重要度の算出
-    mean_abs_shap = np.mean(np.abs(shap_vals), axis=0)
-    feat_importance = pd.Series(mean_abs_shap, index=X.columns)
-    selected_feats = feat_importance.sort_values(ascending=False).head(args.top_k).index.tolist()
+    mean_abs_shap    = np.mean(np.abs(shap_vals), axis=0)
+    feat_importance  = pd.Series(mean_abs_shap, index=X.columns)
+    selected_feats   = feat_importance.nlargest(args.top_k).index.tolist()
     print(f"[INFO] Selected top {args.top_k} features: {selected_feats}")
 
-    # 出力用 DataFrame
+    # 出力データフレーム作成および保存
     df_out = df[["time", "label"] + selected_feats + ["future_return"]]
     out_csv = Path(args.out).resolve()
     df_out.to_csv(out_csv, index=False)
