@@ -136,12 +136,13 @@ def main():
         sel_csv   = feat_dir / f"selfeat_{symbol}_{timeframe}_{bars}.csv"
         model_out = model_dir / f"xgb_model_{symbol}_{timeframe}_{bars}.pkl"
         feat_json = model_dir / f"xgb_model_{symbol}_{timeframe}_{bars}_features.json"
+        print(f"[INFO] Training XGBoost model for {symbol} {timeframe} {bars}")
         run([
             sys.executable,
             str(CODE_DIR/"src"/"models"/"train_model.py"),
-            "--file",             str(sel_csv),
-            "--model_out",        str(model_out),
-            "--feature_cols_out", str(feat_json)
+            "--symbol",    symbol,
+            "--timeframe", timeframe,
+            "--bars",      str(bars)
         ])
 
     # Phase4：バックテスト
