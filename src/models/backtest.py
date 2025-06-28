@@ -38,7 +38,7 @@ def plot_equity_curve(df: pd.DataFrame, out_path: Path):
     plt.plot(df["time"], df["equity"])
     plt.title("Equity Curve")
     plt.xlabel("Time")
-    plt.ylabel("Pips (累積)")
+    plt.ylabel("Cumulative Pips")
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(out_path)
