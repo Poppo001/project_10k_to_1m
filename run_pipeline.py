@@ -59,43 +59,36 @@ def main():
         DRIVE     = Path("/content/drive/MyDrive")
         CODE_DIR  = DRIVE / "project_10k_to_1m"
         DATA_DIR  = DRIVE / "project_10k_to_1m_data"
-        # ── raw_dir をサブフォルダ化 ──
         raw_base   = DATA_DIR / "raw"
         proc_dir   = DATA_DIR / "processed"
         model_dir  = DATA_DIR / "processed" / "models"
         report_dir = DATA_DIR / "processed" / "reports"
     else:
-        # ローカル：config.yaml 由来のパスを展開
         raw_base   = resolve_path(cfg["mt5_data_dir"],   cfg)
         proc_dir   = resolve_path(cfg["processed_dir"],  cfg)
         model_dir  = resolve_path(cfg["model_dir"],      cfg)
         report_dir = resolve_path(cfg["report_dir"],     cfg)
         CODE_DIR   = Path().resolve()
 
-    # 各フェーズで使う raw_dir はサブフォルダ化
-    raw_dir = raw_base / symbol / timeframe
+    # ── raw_dir をサブフォルダ化 ──
+    raw_dir   = raw_base   / symbol / timeframe
+    feat_dir  = proc_dir   / symbol / timeframe
 
     # Phase1：生データ取得→特徴量→ラベル→特徴量選択
     if 1 in phases:
-        # raw_dir 自体を確認・作成
-        if not raw_dir.exists():
-            print(f"[ERROR] raw directory does not exist: {raw_dir}")
-            sys.exit(1)
-
-        # 6-1) タイムスタンプ前後両対応でファイル一覧を取得
+        # 1-1) 生データ取得は省略（fetch_mt5_ohlcv.py 等を別途実行）
+        # 1-2) 特徴量生成
         candidates = sorted(raw_dir.glob(f"*_{symbol}_{timeframe}_{bars}.csv"))
         if not candidates:
             candidates = sorted(raw_dir.glob(f"{symbol}_{timeframe}_{bars}_*.csv"))
         if not candidates:
-            print(f"[ERROR] No raw CSV in {raw_dir} matching "
-                  f"*_{symbol}_{timeframe}_{bars}.csv or "
-                  f"{symbol}_{timeframe}_{bars}_*.csv")
+            print(f"[ERROR] No raw CSV in {raw_dir}")
             sys.exit(1)
         raw_csv = candidates[-1]
         print(f"[INFO] Using raw CSV: {raw_csv}")
 
-        # 6-2) feature_gen.py 実行
-        feat_out = proc_dir / symbol / timeframe / f"feat_{symbol}_{timeframe}_{bars}.csv"
+        # 1-3) feature_gen.py
+        feat_out = feat_dir / f"feat_{symbol}_{timeframe}_{bars}.csv"
         run([
             sys.executable,
             str(CODE_DIR/"src"/"data"/"feature_gen.py"),
@@ -103,8 +96,8 @@ def main():
             "--out", str(feat_out)
         ])
 
-        # 6-3) label_gen.py 実行
-        lab_out = proc_dir / symbol / timeframe / f"labeled_{symbol}_{timeframe}_{bars}.csv"
+        # 1-4) label_gen.py
+        lab_out = feat_dir / f"labeled_{symbol}_{timeframe}_{bars}.csv"
         run([
             sys.executable,
             str(CODE_DIR/"src"/"data"/"label_gen.py"),
@@ -116,38 +109,39 @@ def main():
             "--out",  str(lab_out)
         ])
 
-        # 6-4) auto_feature_selection.py 実行
-        sel_out = proc_dir / symbol / timeframe / f"selfeat_{symbol}_{timeframe}_{bars}.csv"
+        # 1-5) auto_feature_selection.py
+        sel_out = feat_dir / f"selfeat_{symbol}_{timeframe}_{bars}.csv"
         run([
             sys.executable,
             str(CODE_DIR/"src"/"data"/"auto_feature_selection.py"),
-            "--csv", str(lab_out),
-            "--out", str(sel_out),
+            "--csv",     str(lab_out),
+            "--out_dir", str(feat_dir),
+            "--out",     str(sel_out),
             "--window_size", "5000",
             "--step",        "500",
             "--top_k",       "10"
         ])
 
-    # Phase2：ベースライン構築 (Logistic Regression)
+    # Phase2：ベースライン構築
     if 2 in phases:
-        lab_csv = proc_dir / symbol / timeframe / f"labeled_{symbol}_{timeframe}_{bars}.csv"
+        lab_csv = feat_dir / f"labeled_{symbol}_{timeframe}_{bars}.csv"
         run([
             sys.executable,
             str(CODE_DIR/"src"/"models"/"train_baseline.py"),
             "--csv", str(lab_csv)
         ])
 
-    # Phase3：ブースト木モデル学習 + 特徴量ファイル出力
+    # Phase3：ブースト木モデル学習
     if 3 in phases:
-        sel_csv   = proc_dir / symbol / timeframe / f"selfeat_{symbol}_{timeframe}_{bars}.csv"
+        sel_csv   = feat_dir / f"selfeat_{symbol}_{timeframe}_{bars}.csv"
         model_out = model_dir / f"xgb_model_{symbol}_{timeframe}_{bars}.pkl"
-        feat_out  = model_dir / f"xgb_model_{symbol}_{timeframe}_{bars}_features.json"
+        feat_json = model_dir / f"xgb_model_{symbol}_{timeframe}_{bars}_features.json"
         run([
             sys.executable,
             str(CODE_DIR/"src"/"models"/"train_model.py"),
             "--file",             str(sel_csv),
             "--model_out",        str(model_out),
-            "--feature_cols_out", str(feat_out)
+            "--feature_cols_out", str(feat_json)
         ])
 
     # Phase4：バックテスト
