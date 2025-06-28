@@ -6,46 +6,46 @@ from pathlib import Path
 import yaml
 
 def is_colab() -> bool:
-    """
-    Colab 上かどうかを判定。
-    """
     return os.getcwd().startswith("/content/drive/MyDrive")
 
 def load_config() -> dict:
-    """
-    プロジェクト直下の config.yaml を読み込んで辞書で返す
-    """
-    # ── ここを修正 ──
-    # utils/common.py      -> parent=utils
-    # parent.parent=src    -> parent.parent.parent=project_root
     project_root = Path(__file__).resolve().parents[2]
     cfg_path = project_root / "config.yaml"
     return yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
 
+def resolve_data_root(cfg: dict) -> Path:
+    """
+    Colabなら data_base_colab、ローカルなら data_base_local を返す。
+    """
+    key = "data_base_colab" if is_colab() else "data_base_local"
+    base = cfg.get(key)
+    if base is None:
+        raise KeyError(f"`{key}` not set in config.yaml")
+    return Path(base).resolve()
+
 def resolve_path(path_template: str, cfg: dict) -> Path:
     """
-    config.yaml 中のパス指定文字列（"${…}" を含む）を展開して絶対パス化するユーティリティ。
-    run_pipeline.py 等で使われます。
+    "${...}" プレースホルダ展開＋Colabパス補完。
+    run_pipeline.py 内のパス解決で使います。
     """
     s = path_template
-    for key, val in cfg.items():
-        placeholder = "${" + key + "}"
+    for k, v in cfg.items():
+        placeholder = "${" + k + "}"
         if placeholder in s:
-            s = s.replace(placeholder, str(val))
+            s = s.replace(placeholder, str(v))
     if is_colab() and not s.startswith("/content/drive"):
         s = "/content/drive/MyDrive/" + s.lstrip("/\\")
     return Path(s).resolve()
 
-def resolve_data_root(cfg: dict) -> Path:
+def get_latest_file(dir_path: Path, patterns):
     """
-    FXデータのルートディレクトリを返す。
-    config.yaml に data_base_local／data_base_colab を定義しておく前提。
+    globパターンのリストからマッチファイルを集め、ソートして最新を返す。
+    patterns: 単一文字列 or 文字列リスト
     """
-    if is_colab():
-        key = "data_base_colab"
-    else:
-        key = "data_base_local"
-    base = cfg.get(key)
-    if base is None:
-        raise KeyError(f"[common.resolve_data_root] `{key}` not set in config.yaml")
-    return Path(base).resolve()
+    if isinstance(patterns, str):
+        patterns = [patterns]
+    files = []
+    for pat in patterns:
+        files.extend(dir_path.glob(pat))
+    files = sorted(files)
+    return files[-1] if files else None
