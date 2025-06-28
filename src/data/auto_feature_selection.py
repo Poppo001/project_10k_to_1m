@@ -79,43 +79,50 @@ def main():
 
     # SHAP 計算（tqdmでプログレスバー表示）
     print("[INFO] Starting SHAP calculation...")
-    explainer       = shap.TreeExplainer(model)
-    n_features      = X.shape[1]
-    shap_vals       = np.zeros((total_rows, n_features), dtype=float)
-    chunk_size      = args.window_size
+    explainer  = shap.TreeExplainer(model)
+    n_features = X.shape[1]
+    shap_vals  = np.zeros((total_rows, n_features), dtype=float)
+    chunk_size = args.window_size
 
     for start in tqdm(range(0, total_rows, chunk_size),
                       desc="SHAP calc chunks"):
         end    = min(start + chunk_size, total_rows)
         batch  = X.iloc[start:end]
 
-        # shap_values の返り値を取得
+        # raw_shap の取り出し
         raw_shap = explainer.shap_values(batch)
-        # binary 分類なら list で返るので positive クラスを抽出
-        batch_shap = raw_shap[1] if isinstance(raw_shap, list) else raw_shap
 
-        # shape=(n_features, n_rows) の場合は転置
-        rows  = end - start
-        if batch_shap.shape == (n_features, rows):
-            batch_shap = batch_shap.T
+        # positive クラスに対応する SHAP 値を取得
+        if isinstance(raw_shap, list):
+            # list [class0, class1]
+            batch_shap = raw_shap[1]
+        else:
+            # numpy array
+            if raw_shap.ndim == 3:
+                # shape == (n_rows, n_features, n_classes)
+                batch_shap = raw_shap[:, :, 1]
+            else:
+                # shape == (n_rows, n_features)
+                batch_shap = raw_shap
 
-        # 期待する形状でなければ例外
+        # 形状チェック
+        rows = end - start
         if batch_shap.shape != (rows, n_features):
             raise ValueError(
                 f"[ERROR] SHAP array has wrong shape {batch_shap.shape}, "
-                f"expected {(rows, n_features)}"
+                f"expected ({rows}, {n_features})"
             )
 
         shap_vals[start:end, :] = batch_shap
 
     # 特徴量重要度の算出
-    mean_abs_shap    = np.mean(np.abs(shap_vals), axis=0)
-    feat_importance  = pd.Series(mean_abs_shap, index=X.columns)
-    selected_feats   = feat_importance.nlargest(args.top_k).index.tolist()
+    mean_abs_shap   = np.mean(np.abs(shap_vals), axis=0)
+    feat_importance = pd.Series(mean_abs_shap, index=X.columns)
+    selected_feats  = feat_importance.nlargest(args.top_k).index.tolist()
     print(f"[INFO] Selected top {args.top_k} features: {selected_feats}")
 
     # 出力データフレーム作成および保存
-    df_out = df[["time", "label"] + selected_feats + ["future_return"]]
+    df_out  = df[["time", "label"] + selected_feats + ["future_return"]]
     out_csv = Path(args.out).resolve()
     df_out.to_csv(out_csv, index=False)
     print(f"[INFO] Selected features saved: {out_csv}")
