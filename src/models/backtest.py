@@ -18,8 +18,6 @@ sys.path.insert(0, str(project_root / "src"))
 
 from utils.common import load_config, resolve_data_root, get_latest_file
 
-plt.rcParams['font.family'] = 'MS Gothic'
-
 
 def calc_equity_curve(df: pd.DataFrame, model_dict: dict) -> pd.DataFrame:
     X      = df.drop(columns=["time","label","future_return"])
