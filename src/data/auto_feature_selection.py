@@ -10,6 +10,7 @@ from pathlib import Path
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 import shap
+from tqdm import tqdm  # プログレスバー用
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -39,10 +40,10 @@ def main():
 
     print(f"[INFO] Loading data from: {csv_path}")
     df = pd.read_csv(csv_path)
-    n_rows = len(df)
-    print(f"[INFO] Rows loaded: {n_rows}")
+    total_rows = len(df)
+    print(f"[INFO] Rows loaded: {total_rows}")
 
-    # 必要列抽出
+    # 特徴量行列とラベル
     if "time" in df.columns:
         df_feat = df.drop(columns=["time"])
     else:
@@ -53,15 +54,18 @@ def main():
     # サンプリング
     if args.sample_frac < 1.0:
         print(f"[INFO] Sampling fraction: {args.sample_frac}")
-        X, _, y, _ = train_test_split(X, y,
-                                      train_size=args.sample_frac,
-                                      stratify=y,
-                                      random_state=42)
-        print(f"[INFO] After sampling: {len(X)} rows")
+        X, _, y, _ = train_test_split(
+            X, y,
+            train_size=args.sample_frac,
+            stratify=y,
+            random_state=42
+        )
+        total_rows = len(X)
+        print(f"[INFO] After sampling: {total_rows} rows")
 
-    # 学習／検証分割
+    # 学習/検証分割（ベースライン用テスト分を確保）
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=min(2000, len(X)//10), random_state=42
+        X, y, test_size=min(2000, total_rows//10), random_state=42
     )
 
     # モデル学習
@@ -72,31 +76,29 @@ def main():
     elapsed = time.time() - t0
     print(f"[INFO] RF trained in {elapsed:.1f}s")
 
-    # SHAP 計算（チャンク単位で進捗表示）
+    # SHAP 計算（tqdmでプログレスバー表示）
     print("[INFO] Starting SHAP calculation...")
     explainer = shap.TreeExplainer(model)
 
-    # positive クラスの shap 値のみ取得
-    total_rows = len(X)
     n_features = X.shape[1]
     shap_vals = np.zeros((total_rows, n_features), dtype=float)
-
     chunk_size = args.window_size
-    for start in range(0, total_rows, chunk_size):
+
+    # tqdm でイテレーション
+    for start in tqdm(range(0, total_rows, chunk_size), desc="SHAP calc chunks"):
         end = min(start + chunk_size, total_rows)
         batch = X.iloc[start:end]
-        # predict_proba の positiveクラス(shap_values[1])を取得
+        # pos クラスの shap 値を取得
         batch_shap = explainer.shap_values(batch)[1]
         shap_vals[start:end, :] = batch_shap
-        print(f"[INFO] SHAP calculated rows {start}–{end-1}")
 
-    # 各特徴量の平均絶対 SHAP 値を計算し、上位 top_k を選択
+    # 特徴量重要度の算出
     mean_abs_shap = np.mean(np.abs(shap_vals), axis=0)
     feat_importance = pd.Series(mean_abs_shap, index=X.columns)
     selected_feats = feat_importance.sort_values(ascending=False).head(args.top_k).index.tolist()
     print(f"[INFO] Selected top {args.top_k} features: {selected_feats}")
 
-    # 出力用 DataFrame 作成
+    # 出力用 DataFrame
     df_out = df[["time", "label"] + selected_feats + ["future_return"]]
     out_csv = Path(args.out).resolve()
     df_out.to_csv(out_csv, index=False)
