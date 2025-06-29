@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -10,10 +11,15 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 import shap
 
-# tqdm Notebook/CLI 両対応
-try:
-    from tqdm.notebook import tqdm
-except ImportError:
+# ── 環境に応じて tqdm を使い分け
+# Colab の notebook セッションならウィジェットバー、
+# それ以外（CLI 実行など）はターミナルバーを使う
+if "ipykernel" in sys.modules:
+    try:
+        from tqdm.notebook import tqdm
+    except ImportError:
+        from tqdm import tqdm
+else:
     from tqdm import tqdm
 
 
@@ -69,23 +75,20 @@ def main():
         # SHAP 値取得
         batch_shap = explainer.shap_values(batch_X)
 
-        # 形式に応じて正クラスだけ取り出す
+        # リスト／3次元 ndarray の両方に対応し、必ず (n_samples, n_features) に
         if isinstance(batch_shap, list):
-            # shap < 0.28: list[neg, pos]
-            batch_shap = np.array(batch_shap[1])
+            batch_shap = np.array(batch_shap[1])          # list[neg, pos]
         elif isinstance(batch_shap, np.ndarray) and batch_shap.ndim == 3:
-            # shap >= 0.28: array[class, samples, features]
-            batch_shap = batch_shap[1]
-        # else: already (samples, features)
+            batch_shap = batch_shap[1]                    # shape (2, n, m)
 
         shap_vals[start:end, :] = batch_shap
 
-    # 6) 平均絶対値で重要度算出
+    # 6) 重要度ランキング
     mean_abs_shap = np.mean(np.abs(shap_vals), axis=0)
-    top_idx = np.argsort(-mean_abs_shap)[: args.top_k]
+    top_idx       = np.argsort(-mean_abs_shap)[: args.top_k]
     selected_feats = [feature_cols[i] for i in top_idx]
 
-    # 7) 出力
+    # 7) 結果を書き出し
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     df_sel = df[["time", "label"] + selected_feats + ["future_return"]]
