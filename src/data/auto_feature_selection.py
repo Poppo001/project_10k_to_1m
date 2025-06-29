@@ -10,7 +10,7 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 import shap
 
-# ── Notebook／スクリプト両対応の tqdm インポート
+# tqdm Notebook/CLI 両対応
 try:
     from tqdm.notebook import tqdm
 except ImportError:
@@ -19,27 +19,27 @@ except ImportError:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--csv",          required=True, help="labeled CSV path")
-    parser.add_argument("--out_dir",      required=True, help="output directory")
-    parser.add_argument("--out",          required=True, help="selfeat CSV path")
-    parser.add_argument("--window_size",  type=int,   default=5000, help="chunk size for SHAP")
-    parser.add_argument("--step",         type=int,   default=500,  help="step size between chunks")
-    parser.add_argument("--top_k",        type=int,   default=10,   help="number of features to select")
-    parser.add_argument("--sample_frac",  type=float, default=1.0,  help="fraction to sample (for speed test)")
+    parser.add_argument("--csv",         required=True, help="labeled CSV path")
+    parser.add_argument("--out_dir",     required=True, help="output directory")
+    parser.add_argument("--out",         required=True, help="selfeat CSV path")
+    parser.add_argument("--window_size", type=int,   default=5000, help="chunk size")
+    parser.add_argument("--step",        type=int,   default=500,  help="step size")
+    parser.add_argument("--top_k",       type=int,   default=10,   help="select top K")
+    parser.add_argument("--sample_frac", type=float, default=1.0,  help="sampling fraction")
     args = parser.parse_args()
 
-    # 1) データ読み込み
+    # 1) データロード
     df = pd.read_csv(args.csv, parse_dates=["time"])
     print(f"[INFO] Loading data from: {args.csv}")
     print(f"[INFO] Original rows: {len(df)}")
 
-    # 2) サンプリング（任意）
+    # 2) 任意サンプリング
     if args.sample_frac < 1.0:
         df = df.sample(frac=args.sample_frac, random_state=42).reset_index(drop=True)
         print(f"[INFO] Sampling fraction: {args.sample_frac}")
         print(f"[INFO] After sampling: {len(df)} rows")
 
-    # 特徴量列とラベル列に分離
+    # 特徴量列とラベル
     feature_cols = [c for c in df.columns if c not in ["time", "label", "future_return"]]
     X = df[feature_cols]
     y = df["label"].values
@@ -50,40 +50,44 @@ def main():
     rf.fit(X, y)
     print("[INFO] RF trained.")
 
-    # 4) SHAP 配列初期化
-    total_rows  = len(df)
-    n_features  = len(feature_cols)
-    shap_vals   = np.zeros((total_rows, n_features), dtype=float)
+    # 4) SHAP 用配列初期化
+    total_rows = len(df)
+    n_features = len(feature_cols)
+    shap_vals = np.zeros((total_rows, n_features), dtype=float)
 
     # 5) SHAP 計算
-    explainer   = shap.TreeExplainer(rf)
-    chunk_size  = args.window_size
-
+    explainer = shap.TreeExplainer(rf)
     for start in tqdm(
         range(0, total_rows, args.step),
         desc="SHAP calc chunks",
-        leave=True,        # ループ後もバーを残す
-        mininterval=0.5    # 更新間隔：0.5秒
+        leave=True,
+        mininterval=0.5
     ):
-        end       = min(start + chunk_size, total_rows)
-        batch_X   = X.iloc[start:end]
+        end = min(start + args.window_size, total_rows)
+        batch_X = X.iloc[start:end]
+
+        # SHAP 値取得
         batch_shap = explainer.shap_values(batch_X)
 
-        # 二分類時は正クラス側のみ抽出
+        # 形式に応じて正クラスだけ取り出す
         if isinstance(batch_shap, list):
+            # shap < 0.28: list[neg, pos]
             batch_shap = np.array(batch_shap[1])
+        elif isinstance(batch_shap, np.ndarray) and batch_shap.ndim == 3:
+            # shap >= 0.28: array[class, samples, features]
+            batch_shap = batch_shap[1]
+        # else: already (samples, features)
 
         shap_vals[start:end, :] = batch_shap
 
-    # 6) 平均絶対 SHAP で重要度ランキング
+    # 6) 平均絶対値で重要度算出
     mean_abs_shap = np.mean(np.abs(shap_vals), axis=0)
-    idx_sorted    = np.argsort(-mean_abs_shap)[: args.top_k]
-    selected_feats = [feature_cols[i] for i in idx_sorted]
+    top_idx = np.argsort(-mean_abs_shap)[: args.top_k]
+    selected_feats = [feature_cols[i] for i in top_idx]
 
-    # 7) 結果出力
+    # 7) 出力
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-
     df_sel = df[["time", "label"] + selected_feats + ["future_return"]]
     df_sel.to_csv(args.out, index=False)
 
