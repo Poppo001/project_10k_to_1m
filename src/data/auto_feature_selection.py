@@ -7,19 +7,19 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 import shap
-from multiprocessing import cpu_count
-from tqdm.contrib.concurrent import process_map
+from multiprocessing import cpu_count, Pool
+from tqdm import tqdm
 
 # tqdmを環境に合わせて取得
 def get_tqdm():
     if "ipykernel" in sys.modules:
         try:
-            from tqdm.notebook import tqdm
+            from tqdm.notebook import tqdm as nb_tqdm
         except ImportError:
-            from tqdm import tqdm
+            nb_tqdm = tqdm
+        return nb_tqdm
     else:
-        from tqdm import tqdm
-    return tqdm
+        return tqdm
 
 # SHAP出力を(batch_size, n_features)に整形する
 def reshape_shap(sv, n_classes, n_features, batch_size):
@@ -27,9 +27,8 @@ def reshape_shap(sv, n_classes, n_features, batch_size):
         return np.asarray(sv[1])
     if not isinstance(sv, np.ndarray):
         raise ValueError(f"Unsupported SHAP type: {type(sv)}")
-    # sv.ndim == 3 or 2
     if sv.ndim == 3:
-        #  (classes, samples, features) or (samples, classes, features)
+        # (classes, samples, features) or (samples, classes, features)
         if sv.shape[0] == n_classes:
             return sv[1]
         return sv[:, 1, :]
@@ -41,6 +40,8 @@ def reshape_shap(sv, n_classes, n_features, batch_size):
     raise ValueError(f"Unexpected SHAP shape: {sv.shape}")
 
 # 各チャンクを計算するワーカー
+# global explainer を使用
+
 def compute_chunk(args):
     start, end, X_np, n_classes, n_features = args
     batch_size = end - start
@@ -110,16 +111,12 @@ def main():
 
     # プロセスプールでSHAP計算
     print("[INFO] Starting parallel SHAP computation...")
-    tqdm = get_tqdm()
-    # init_workerでexplainerを各プロセスにセット
-    results = process_map(
-        compute_chunk,
-        [(s, min(s + optimal_window, total_rows), X_np, n_classes, n_features) for s in starts],
-        max_workers=n_workers,
-        initializer=init_worker,
-        initargs=(rf,),
-        desc="SHAP parallel chunks"
-    )
+    tqdm_cls = get_tqdm()
+    args_list = [(s, min(s + optimal_window, total_rows), X_np, n_classes, n_features) for s in starts]
+    results = []
+    with Pool(processes=n_workers, initializer=init_worker, initargs=(rf,)) as pool:
+        for start, arr in tqdm_cls(pool.imap(compute_chunk, args_list), total=len(args_list), desc="SHAP parallel chunks"):
+            results.append((start, arr))
 
     # 結果統合
     for start, arr in results:
