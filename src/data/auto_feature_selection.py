@@ -24,24 +24,32 @@ def get_tqdm():
 # SHAP出力を(batch_size, n_features)に整形する
 def reshape_shap(sv, n_classes, n_features, batch_size):
     if isinstance(sv, list):
+        # list[class0, class1]
         return np.asarray(sv[1])
     if not isinstance(sv, np.ndarray):
         raise ValueError(f"Unsupported SHAP type: {type(sv)}")
+    # 3次元配列
     if sv.ndim == 3:
         # (classes, samples, features) or (samples, classes, features)
         if sv.shape[0] == n_classes:
             return sv[1]
         return sv[:, 1, :]
+    # 2次元配列
     if sv.ndim == 2:
+        # (samples, features)
         if sv.shape == (batch_size, n_features):
             return sv
+        # (features, classes)
+        if sv.shape == (n_features, n_classes):
+            return np.repeat(sv[:, 1][np.newaxis, :], batch_size, axis=0)
+        # (classes, features)
         if sv.shape == (n_classes, n_features):
             return np.repeat(sv[1][np.newaxis, :], batch_size, axis=0)
-    raise ValueError(f"Unexpected SHAP shape: {sv.shape}")
+        # (samples, classes) → 未サポート
+        raise ValueError(f"Unexpected SHAP shape: {sv.shape}. 2D array with second dim != n_features.")
+    raise ValueError(f"Unsupported SHAP ndim: {sv.ndim}")
 
-# 各チャンクを計算するワーカー
-# global explainer を使用
-
+# 各チャンクを計算するワーカー（parallel only）
 def compute_chunk(args):
     start, end, X_np, n_classes, n_features = args
     batch_size = end - start
@@ -106,25 +114,35 @@ def main():
         starts = list(range(0, total_rows, step))
         print(f"[INFO] Parallel SHAP: window={optimal_window}, step={step}, chunks={len(starts)}")
 
-    # numpy配列化（forkによるメモリ共有想定）
+    # numpy配列化
     X_np = X.values
 
-    # プロセスプールでSHAP計算
-    print("[INFO] Starting parallel SHAP computation...")
+    # SHAP計算
     tqdm_cls = get_tqdm()
-    args_list = [(s, min(s + optimal_window, total_rows), X_np, n_classes, n_features) for s in starts]
-    results = []
-    with Pool(processes=n_workers, initializer=init_worker, initargs=(rf,)) as pool:
-        for start, arr in tqdm_cls(pool.imap(compute_chunk, args_list), total=len(args_list), desc="SHAP parallel chunks"):
-            results.append((start, arr))
-
-    # 結果統合
-    for start, arr in results:
-        shap_vals[start:start + arr.shape[0], :] = arr
+    if n_workers > 1 and len(starts) > 1:
+        # 並列実行
+        print("[INFO] Starting parallel SHAP computation...")
+        args_list = [(s, min(s + optimal_window, total_rows), X_np, n_classes, n_features) for s in starts]
+        results = []
+        with Pool(processes=n_workers, initializer=init_worker, initargs=(rf,)) as pool:
+            for start, arr in tqdm_cls(pool.imap(compute_chunk, args_list), total=len(args_list), desc="SHAP parallel chunks"):
+                results.append((start, arr))
+        for start, arr in results:
+            shap_vals[start:start + arr.shape[0], :] = arr
+    else:
+        # シーケンシャル実行
+        print("[INFO] Starting sequential SHAP computation...")
+        explainer = shap.TreeExplainer(rf, model_output="raw", approximate=True)
+        for start in tqdm_cls(starts, desc="SHAP chunks", total=len(starts)):
+            end = min(start + optimal_window, total_rows)
+            batch = X_np[start:end]
+            sv = explainer.shap_values(batch)
+            arr = reshape_shap(sv, n_classes, n_features, end - start)
+            shap_vals[start:start + arr.shape[0], :] = arr
 
     # 上位K特徴量選出
     mean_abs = np.mean(np.abs(shap_vals), axis=0)
-    top_idx = np.argsort(-mean_abs)[: args.top_k]
+    top_idx = np.argsort(-mean_abs)[:args.top_k]
     selected = [feature_cols[i] for i in top_idx]
 
     # 出力
