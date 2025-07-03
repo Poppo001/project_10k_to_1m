@@ -1,161 +1,119 @@
 #!/usr/bin/env python3
-# run_pipeline.py
-
 import argparse
 import subprocess
-import sys
+import glob
 import os
-from pathlib import Path
+import pandas as pd
 
-def is_colab() -> bool:
-    """
-    Colab上（Driveマウント直下）で動作しているか判定。
-    """
-    return os.getcwd().startswith("/content/drive/MyDrive")
+def find_latest_file(pattern):
+    files = glob.glob(pattern)
+    if not files:
+        raise FileNotFoundError(f"No files match pattern: {pattern}")
+    return sorted(files)[-1]
 
-def run(cmd: list):
-    """
-    外部スクリプトを実行するユーティリティ
-    """
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Run full FX pipeline with optional fixed features')
+    parser.add_argument('--symbol', required=True, help='Currency pair symbol, e.g. USDJPY')
+    parser.add_argument('--timeframe', required=True, help='Timeframe, e.g. M5')
+    parser.add_argument('--bars', type=int, default=100000, help='Number of bars')
+    parser.add_argument('--tp', type=int, default=140, help='Take-profit pips')
+    parser.add_argument('--sl', type=int, default=10, help='Stop-loss pips')
+    parser.add_argument('--sample_frac', type=float, default=1.0, help='Sampling fraction for feature selection')
+    parser.add_argument('--fixed_features', nargs='+', help='List of features to use; if set, skip auto-selection')
+    parser.add_argument('--n_workers', type=int, help='Parallel workers for SHAP')
+    parser.add_argument('--window_size', type=int, help='Chunk size for SHAP')
+    args = parser.parse_args()
+
+    base = '/content/drive/MyDrive/project_10k_to_1m_data'
+    raw_dir = os.path.join(base, 'raw', args.symbol, args.timeframe)
+    proc_dir = os.path.join(base, 'processed', args.symbol, args.timeframe)
+    models_dir = os.path.join(base, 'processed', 'models')
+    os.makedirs(proc_dir, exist_ok=True)
+    os.makedirs(models_dir, exist_ok=True)
+
+    # 1) Raw CSV
+    raw_pattern = os.path.join(raw_dir, f"{args.symbol}_{args.timeframe}_{args.bars}_*.csv")
+    raw_csv = find_latest_file(raw_pattern)
+    print(f"[INFO] Using raw CSV: {raw_csv}")
+
+    # 2) Feature generation
+    feat_csv = os.path.join(proc_dir, f"feat_{args.symbol}_{args.timeframe}_{args.bars}.csv")
+    cmd = [
+        'python3', 'src/data/feature_gen.py',
+        '--csv', raw_csv,
+        '--out', feat_csv
+    ]
     print(f"[RUN] {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
 
-def main():
-    # 1) 引数パース
-    parser = argparse.ArgumentParser(description="Run Phases 1–4")
-    parser.add_argument(
-        "--phase",
-        default=None,
-        help="実行するフェーズ(例:1,1-3,2-4; 未指定はconfig.yamlのrun_phases)"
-    )
-    args = parser.parse_args()
+    # 3) Label generation
+    labeled_csv = os.path.join(proc_dir, f"labeled_{args.symbol}_{args.timeframe}_{args.bars}.csv")
+    cmd = [
+        'python3', 'src/data/label_gen.py',
+        '--file', feat_csv,
+        '--tp', str(args.tp),
+        '--sl', str(args.sl),
+        '--exclude_before_release', 'True',
+        '--release_exclude_window_mins', '30',
+        '--out', labeled_csv
+    ]
+    print(f"[RUN] {' '.join(cmd)}")
+    subprocess.run(cmd, check=True)
 
-    # 2) 設定ファイル読み込み
-    from src.utils.common import load_config, resolve_path
-    cfg = load_config()
-
-    # 3) パラメータ取得
-    symbol    = cfg["symbol"]
-    timeframe = cfg["timeframe"]
-    bars      = cfg["bars"]
-    tp        = cfg["label_gen"]["tp"]
-    sl        = cfg["label_gen"]["sl"]
-    excl      = cfg["label_gen"]["exclude_before_release"]
-    excl_w    = cfg["label_gen"]["release_exclude_window_mins"]
-    default_phases = cfg.get("run_phases", [1,2,3,4])
-
-    # 4) フェーズ指定を解釈
-    if args.phase:
-        if "-" in args.phase:
-            s, e = args.phase.split("-")
-            phases = list(range(int(s), int(e) + 1))
-        else:
-            phases = [int(x) for x in args.phase.split(",")]
+    # 4) Feature selection or fixed
+    if args.fixed_features:
+        selected = args.fixed_features
+        selfeat_csv = labeled_csv  # use labeled CSV for model training, selecting columns later
+        print(f"[INFO] Using fixed features: {selected}")
     else:
-        phases = default_phases
+        selfeat_csv = os.path.join(proc_dir, f"selfeat_{args.symbol}_{args.timeframe}_{args.bars}.csv")
+        cmd = [
+            'python3', 'src/data/auto_feature_selection_v7_fastfallback.py',
+            '--csv', labeled_csv,
+            '--out_dir', proc_dir,
+            '--out', selfeat_csv,
+            '--sample_frac', str(args.sample_frac)
+        ]
+        if args.n_workers:
+            cmd += ['--n_workers', str(args.n_workers)]
+        if args.window_size:
+            cmd += ['--window_size', str(args.window_size)]
+        print(f"[RUN] {' '.join(cmd)}")
+        subprocess.run(cmd, check=True)
+        # parse selected features from header
+        df_sel = pd.read_csv(selfeat_csv, nrows=0)
+        selected = [c for c in df_sel.columns if c not in ['time','label','future_return']]
+        print(f"[INFO] Auto-selected features: {selected}")
 
-    # 5) 実行環境によるパス決定
-    if is_colab():
-        DRIVE     = Path("/content/drive/MyDrive")
-        CODE_DIR  = DRIVE / "project_10k_to_1m"
-        DATA_DIR  = DRIVE / "project_10k_to_1m_data"
-        raw_base   = DATA_DIR / "raw"
-        proc_dir   = DATA_DIR / "processed"
-        model_dir  = DATA_DIR / "processed" / "models"
-        report_dir = DATA_DIR / "processed" / "reports"
-    else:
-        raw_base   = resolve_path(cfg["mt5_data_dir"],   cfg)
-        proc_dir   = resolve_path(cfg["processed_dir"],  cfg)
-        model_dir  = resolve_path(cfg["model_dir"],      cfg)
-        report_dir = resolve_path(cfg["report_dir"],     cfg)
-        CODE_DIR   = Path().resolve()
+    # 5) Baseline training
+    baseline_cmd = [
+        'python3', 'src/models/train_baseline.py',
+        '--csv', selfeat_csv,
+        '--features'
+    ] + selected
+    print(f"[RUN] {' '.join(baseline_cmd)}")
+    subprocess.run(baseline_cmd, check=True)
 
-    # ── raw_dir をサブフォルダ化 ──
-    raw_dir   = raw_base   / symbol / timeframe
-    feat_dir  = proc_dir   / symbol / timeframe
+    # 6) XGBoost training
+    train_cmd = [
+        'python3', 'src/models/train_model.py',
+        '--symbol', args.symbol,
+        '--timeframe', args.timeframe,
+        '--bars', str(args.bars),
+        '--features'
+    ] + selected
+    print(f"[RUN] {' '.join(train_cmd)}")
+    subprocess.run(train_cmd, check=True)
 
-    # Phase1：生データ取得→特徴量→ラベル→特徴量選択
-    if 1 in phases:
-        # 1-1) 生データ取得は省略（fetch_mt5_ohlcv.py 等を別途実行）
-        # 1-2) 特徴量生成
-        candidates = sorted(raw_dir.glob(f"*_{symbol}_{timeframe}_{bars}.csv"))
-        if not candidates:
-            candidates = sorted(raw_dir.glob(f"{symbol}_{timeframe}_{bars}_*.csv"))
-        if not candidates:
-            print(f"[ERROR] No raw CSV in {raw_dir}")
-            sys.exit(1)
-        raw_csv = candidates[-1]
-        print(f"[INFO] Using raw CSV: {raw_csv}")
+    # 7) Backtest
+    backtest_cmd = [
+        'python3', 'src/models/backtest.py',
+        '--symbol', args.symbol,
+        '--timeframe', args.timeframe,
+        '--bars', str(args.bars),
+        '--features'
+    ] + selected
+    print(f"[RUN] {' '.join(backtest_cmd)}")
+    subprocess.run(backtest_cmd, check=True)
 
-        # 1-3) feature_gen.py
-        feat_out = feat_dir / f"feat_{symbol}_{timeframe}_{bars}.csv"
-        run([
-            sys.executable,
-            str(CODE_DIR/"src"/"data"/"feature_gen.py"),
-            "--csv", str(raw_csv),
-            "--out", str(feat_out)
-        ])
-
-        # 1-4) label_gen.py
-        lab_out = feat_dir / f"labeled_{symbol}_{timeframe}_{bars}.csv"
-        run([
-            sys.executable,
-            str(CODE_DIR/"src"/"data"/"label_gen.py"),
-            "--file", str(feat_out),
-            "--tp",   str(tp),
-            "--sl",   str(sl),
-            "--exclude_before_release",      str(excl),
-            "--release_exclude_window_mins", str(excl_w),
-            "--out",  str(lab_out)
-        ])
-
-        # 1-5) auto_feature_selection.py
-        sel_out = feat_dir / f"selfeat_{symbol}_{timeframe}_{bars}.csv"
-        run([
-            sys.executable,
-            str(CODE_DIR/"src"/"data"/"auto_feature_selection.py"),
-            "--csv",     str(lab_out),
-            "--out_dir", str(feat_dir),
-            "--out",     str(sel_out),
-            "--window_size", "5000",
-            "--step",        "500",
-            "--top_k",       "10"
-        ])
-
-    # Phase2：ベースライン構築
-    if 2 in phases:
-        lab_csv = feat_dir / f"labeled_{symbol}_{timeframe}_{bars}.csv"
-        run([
-            sys.executable,
-            str(CODE_DIR/"src"/"models"/"train_baseline.py"),
-            "--csv", str(lab_csv)
-        ])
-
-    # Phase3：ブースト木モデル学習
-    if 3 in phases:
-        sel_csv   = feat_dir / f"selfeat_{symbol}_{timeframe}_{bars}.csv"
-        model_out = model_dir / f"xgb_model_{symbol}_{timeframe}_{bars}.pkl"
-        feat_json = model_dir / f"xgb_model_{symbol}_{timeframe}_{bars}_features.json"
-        print(f"[INFO] Training XGBoost model for {symbol} {timeframe} {bars}")
-        run([
-            sys.executable,
-            str(CODE_DIR/"src"/"models"/"train_model.py"),
-            "--symbol",    symbol,
-            "--timeframe", timeframe,
-            "--bars",      str(bars)
-        ])
-
-    # Phase4：バックテスト
-    if 4 in phases:
-        run([
-            sys.executable,
-            str(CODE_DIR/"src"/"models"/"backtest.py"),
-            "--symbol",    symbol,
-            "--timeframe", timeframe,
-            "--bars",      str(bars)
-        ])
-
-    print("\n--- All done! ---")
-
-if __name__ == "__main__":
-    main()
+    print('\n--- All done! ---')
