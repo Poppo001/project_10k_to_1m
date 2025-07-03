@@ -26,9 +26,9 @@ def objective(trial, X, y):
         'eval_metric': 'auc',
         'use_label_encoder': False,
         'max_depth': trial.suggest_int('max_depth', 3, 10),
-        'learning_rate': trial.suggest_loguniform('learning_rate', 0.01, 0.3),
-        'subsample': trial.suggest_uniform('subsample', 0.5, 1.0),
-        'colsample_bytree': trial.suggest_uniform('colsample_bytree', 0.5, 1.0),
+        'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
+        'subsample': trial.suggest_float('subsample', 0.5, 1.0),
+        'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 1.0),
         'min_child_weight': trial.suggest_int('min_child_weight', 1, 10)
     }
     X_train, X_val, y_train, y_val = train_test_split(
@@ -73,7 +73,7 @@ if __name__ == '__main__':
         json.dump(study.best_params, f, indent=2)
     print(f"Saved best params to {args.output}")
 
-    # Train final model
+    # Train final model with best params
     final_params = study.best_params.copy()
     final_params.update({
         'objective': 'binary:logistic',
@@ -82,7 +82,8 @@ if __name__ == '__main__':
     })
     dtrain = xgb.DMatrix(X, label=y)
     final_model = xgb.train(
-        final_params, dtrain, num_boost_round=study.best_trial.number * 10)
+        final_params, dtrain,
+        num_boost_round=study.best_trial.number * 10)
     model_path = args.output.replace('.json', '_model.xgb')
     final_model.save_model(model_path)
     print(f"Saved final XGBoost model to {model_path}")
