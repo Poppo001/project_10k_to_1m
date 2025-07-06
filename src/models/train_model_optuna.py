@@ -1,29 +1,34 @@
 #!/usr/bin/env python3
+"""
+train_model_optuna.py
+
+ステージ1：モデルとエントリー閾値（threshold）の最適化を行うスクリプトです。
+Colab無料版のGPU（Tesla T4等）を使った高速化とOptuna Prunerで時短を図ります。
+"""
 import argparse
 import json
 import pandas as pd
+import numpy as np
 import optuna
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_auc_score
-
+from optuna.pruners import MedianPruner
+from backtest import calculate_sharpe
 
 def load_data(csv_path, features_json=None):
     df = pd.read_csv(csv_path)
     if features_json:
-        with open(features_json) as f:
+        with open(features_json, 'r') as f:
             features = json.load(f)
     else:
         features = [c for c in df.columns if c not in ['time', 'label', 'future_return']]
-    X = df[features]
-    y = df['label']
-    return X, y, features
+    return df, features
 
-
-def objective(trial, X, y):
+def objective(trial, df, features, spread, slippage, use_gpu):
+    # 探索するハイパーパラ
     params = {
         'objective': 'binary:logistic',
-        'eval_metric': 'auc',
+        'eval_metric': 'logloss',
         'use_label_encoder': False,
         'max_depth': trial.suggest_int('max_depth', 3, 10),
         'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
@@ -31,59 +36,99 @@ def objective(trial, X, y):
         'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 1.0),
         'min_child_weight': trial.suggest_int('min_child_weight', 1, 10)
     }
-    X_train, X_val, y_train, y_val = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y)
+    if use_gpu:
+        params['tree_method'] = 'gpu_hist'
+
+    # エントリー閾値探索
+    threshold = trial.suggest_float('threshold', 0.3, 0.7)
+
+    # 学習/検証分割
+    df_train, df_val = train_test_split(
+        df, test_size=0.2, random_state=42, stratify=df['label']
+    )
+    X_train, y_train = df_train[features], df_train['label']
+    X_val,   y_val   = df_val[features],   df_val['future_return']
+
+    # XGBoost モデル学習
     dtrain = xgb.DMatrix(X_train, label=y_train)
-    dval = xgb.DMatrix(X_val, label=y_val)
     model = xgb.train(
-        params, dtrain, num_boost_round=1000,
-        evals=[(dval, 'validation')],
-        early_stopping_rounds=50, verbose_eval=False)
-    preds = model.predict(dval)
-    return roc_auc_score(y_val, preds)
+        params,
+        dtrain,
+        num_boost_round=500,
+        early_stopping_rounds=20,
+        evals=[(dtrain, 'train')],
+        verbose_eval=False
+    )
 
+    # 検証データでシミュレーション
+    dval = xgb.DMatrix(X_val)
+    preds   = model.predict(dval)
+    signals = (preds >= threshold).astype(int)
+    pnl_list = [(ret - spread - slippage) if sig == 1 else 0.0
+                for sig, ret in zip(signals, y_val)]
 
-if __name__ == '__main__':
+    # Sharpe 計算
+    return calculate_sharpe(pnl_list)
+
+def main():
     parser = argparse.ArgumentParser(
-        description='Hyperparameter tuning for XGBoost with Optuna')
-    parser.add_argument(
-        '--csv', required=True,
-        help='Path to labeled CSV (with time, label, and feature columns)')
-    parser.add_argument(
-        '--features', required=False,
-        help='Path to JSON file listing feature column names')
-    parser.add_argument(
-        '--trials', type=int, default=50,
-        help='Number of Optuna trials (default: 50)')
-    parser.add_argument(
-        '--output', required=True,
-        help='Output path for best parameters JSON')
+        description='Stage1: XGBoost + threshold Optuna (Sharpe max)'
+    )
+    parser.add_argument('--csv',       required=True, help='ラベル付きCSVパス')
+    parser.add_argument('--features',  help='特徴量リストJSONパス')
+    parser.add_argument('--trials',    type=int, default=30, help='Optuna試行回数')
+    parser.add_argument('--spread',    type=float, default=3.4, help='スプレッド(pips)')
+    parser.add_argument('--slippage',  type=float, default=10.0, help='スリッページ(pips)')
+    parser.add_argument('--use-gpu',   action='store_true', help='GPU を使用')
+    parser.add_argument('--output',    required=True, help='結果JSON出力パス')
     args = parser.parse_args()
 
-    X, y, features = load_data(args.csv, args.features)
-    study = optuna.create_study(direction='maximize')
+    df, features = load_data(args.csv, args.features)
+
+    study = optuna.create_study(
+        direction='maximize',
+        pruner=MedianPruner(n_startup_trials=5, n_warmup_steps=5)
+    )
     study.optimize(
-        lambda trial: objective(trial, X, y),
-        n_trials=args.trials)
+        lambda trial: objective(
+            trial, df, features,
+            args.spread, args.slippage, args.use_gpu
+        ),
+        n_trials=args.trials
+    )
 
-    print(f"Best AUC: {study.best_value:.4f}")
-    print(f"Best params: {study.best_params}")
+    best = study.best_params.copy()
+    best_threshold = best.pop('threshold')
+    best_sharpe    = study.best_value
 
+    # 出力データ作成
+    result = best.copy()
+    result['threshold'] = best_threshold
     with open(args.output, 'w') as f:
-        json.dump(study.best_params, f, indent=2)
-    print(f"Saved best params to {args.output}")
+        json.dump(result, f, indent=2)
 
-    # Train final model with best params
-    final_params = study.best_params.copy()
+    print(f"Best Sharpe    : {best_sharpe:.4f}")
+    print(f"Best Params    : {result}")
+
+    # 最終モデルを全データ学習で保存
+    dtrain = xgb.DMatrix(df[features], label=df['label'])
+    final_params = best.copy()
     final_params.update({
         'objective': 'binary:logistic',
-        'eval_metric': 'auc',
+        'eval_metric': 'logloss',
         'use_label_encoder': False
     })
-    dtrain = xgb.DMatrix(X, label=y)
+    if args.use_gpu:
+        final_params['tree_method'] = 'gpu_hist'
     final_model = xgb.train(
-        final_params, dtrain,
-        num_boost_round=study.best_trial.number * 10)
+        final_params,
+        dtrain,
+        num_boost_round=study.best_trial.number * 10,
+        verbose_eval=False
+    )
     model_path = args.output.replace('.json', '_model.xgb')
     final_model.save_model(model_path)
-    print(f"Saved final XGBoost model to {model_path}")
+    print(f"Saved model to {model_path}")
+
+if __name__ == '__main__':
+    main()
