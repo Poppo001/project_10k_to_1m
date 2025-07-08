@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-"""
-optimize_tp_sl.py
-
-ステージ2：Stage1で学習・閾値確定済みのモデルを用い、TP/SLを最適化するスクリプトです。
-Colab無料版でも高速に実行できるよう、Trial数を抑えつつ、nan/inf を回避する実装を含みます。
-"""
 import argparse
 import json
 import pandas as pd
@@ -12,7 +6,6 @@ import numpy as np
 import optuna
 import xgboost as xgb
 from backtest import calculate_sharpe
-
 
 def load_data(csv_path, features_json):
     df = pd.read_csv(csv_path)
@@ -22,71 +15,55 @@ def load_data(csv_path, features_json):
     ret = df['future_return']
     return X, ret
 
-
-def objective(trial, model, X, ret, threshold, spread, slippage):
-    # TP/SL 探索範囲を定義
-    tp = trial.suggest_float('tp', 1.0, 50.0)
-    sl = trial.suggest_float('sl', 1.0, 50.0)
-
-    # 予測とシミュレーション
-    dmat = xgb.DMatrix(X)
-    preds = model.predict(dmat)
-    signals = (preds >= threshold).astype(int)
-    pnl_list = []
-    for sig, r in zip(signals, ret):
-        if sig == 1:
-            capped = np.clip(r, -sl, tp)
-            pnl = capped - spread - slippage
-        else:
-            pnl = 0.0
-        pnl_list.append(pnl)
-
-    # Sharpe Ratio を計算
-    sharpe = calculate_sharpe(pnl_list)
-    # 非有限値（nan, inf）は最低値で評価
-    if not np.isfinite(sharpe):
-        return -1.0
-    return sharpe
-
-
 def main():
-    parser = argparse.ArgumentParser(
-        description='Stage2: TP/SL 最適化 (Sharpe max)'
-    )
-    parser.add_argument('--csv',       required=True, help='ラベル付きCSVファイルのパス')
-    parser.add_argument('--features',  required=True, help='特徴量リストJSONのパス')
-    parser.add_argument('--model-path', required=True, help='Stage1で保存したXGBoostモデル(.xgb)のパス')
-    parser.add_argument('--threshold',  type=float, required=True, help='Stage1で最適化された閾値')
-    parser.add_argument('--spread',    type=float, default=3.4, help='スプレッド(pips)')
-    parser.add_argument('--slippage',  type=float, default=10.0, help='スリッページ(pips)')
-    parser.add_argument('--trials',    type=int, default=15, help='Optuna試行回数(デフォルト:15)')
-    parser.add_argument('--output',    required=True, help='最適TP/SLを保存するJSONパス')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--csv', required=True)
+    parser.add_argument('--features', required=True)
+    parser.add_argument('--model-path', required=True)
+    parser.add_argument('--spread', type=float, default=3.4)
+    parser.add_argument('--slippage', type=float, default=10.0)
+    parser.add_argument('--thr-low', type=float, default=0.3)
+    parser.add_argument('--thr-high', type=float, default=0.7)
+    parser.add_argument('--tp-low', type=float, default=5.0)
+    parser.add_argument('--tp-high', type=float, default=20.0)
+    parser.add_argument('--sl-low', type=float, default=5.0)
+    parser.add_argument('--sl-high', type=float, default=20.0)
+    parser.add_argument('--alpha', type=float, default=1.0)
+    parser.add_argument('--trials', type=int, default=30)
+    parser.add_argument('--output', required=True)
     args = parser.parse_args()
-
-    # データロード
     X, ret = load_data(args.csv, args.features)
-
-    # モデルロード
     model = xgb.Booster()
     model.load_model(args.model_path)
-
-    # Optuna で最適化
+    def objective(trial):
+        th = trial.suggest_float('threshold', args.thr_low, args.thr_high)
+        tp = trial.suggest_float('tp', args.tp_low, args.tp_high)
+        sl = trial.suggest_float('sl', args.sl_low, args.sl_high)
+        dmat = xgb.DMatrix(X)
+        preds = model.predict(dmat)
+        signals = (preds >= th).astype(int)
+        equity = 0.0
+        peak = 0.0
+        max_dd = 0.0
+        pnl_list = []
+        for sig, r in zip(signals, ret):
+            pnl = (np.clip(r, -sl, tp) - args.spread - args.slippage) if sig == 1 else 0.0
+            equity += pnl
+            peak = max(peak, equity)
+            max_dd = max(max_dd, peak - equity)
+            pnl_list.append(pnl)
+        sharpe = calculate_sharpe(pnl_list)
+        final_eq = equity
+        score = sharpe - args.alpha * (max_dd / (abs(final_eq) + 1e-9))
+        return score if np.isfinite(score) else -np.inf
     study = optuna.create_study(direction='maximize')
-    study.optimize(
-        lambda trial: objective(trial, model, X, ret,
-                                 args.threshold, args.spread, args.slippage),
-        n_trials=args.trials
-    )
-
-    best_params = study.best_params.copy()
-    best_sharpe = study.best_value
-
-    # 結果保存
+    study.optimize(objective, n_trials=args.trials)
+    best = study.best_params.copy()
+    result = {'threshold': best.pop('threshold'), 'tp': best.pop('tp'), 'sl': best.pop('sl')}
     with open(args.output, 'w') as f:
-        json.dump(best_params, f, indent=2)
-
-    print(f"Best Sharpe : {best_sharpe:.4f}")
-    print(f"Best TP/SL  : {best_params}")
+        json.dump(result, f, indent=2)
+    print(f"Best Score   : {study.best_value:.4f}")
+    print(f"Best Params  : {result}")
 
 if __name__ == '__main__':
     main()
