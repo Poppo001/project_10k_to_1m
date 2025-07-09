@@ -1,0 +1,18 @@
+2025-07-10 07:33:55,432 INFO MT5 initialized successfully.
+2025-07-10 07:33:55,432 INFO mt5watch started.
+2025-07-10 07:33:58,730 ERROR 推論エラー: generate_features() got an unexpected keyword argument 'atr_window'
+2025-07-10 07:33:58,730 ERROR 予期せぬ例外: name 'send_webhook' is not defined
+Traceback (most recent call last):
+  File "c:\Projects\project_10k_to_1m\paper_trade\mt5watch.py", line 112, in decide_signal
+    feats     = generate_features(bar, **cfg['features'])
+TypeError: generate_features() got an unexpected keyword argument 'atr_window'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "c:\Projects\project_10k_to_1m\paper_trade\mt5watch.py", line 143, in <module>
+    sig = decide_signal(bar)
+  File "c:\Projects\project_10k_to_1m\paper_trade\mt5watch.py", line 117, in decide_signal
+    send_webhook(f"推論エラー: {e}")
+NameError: name 'send_webhook' is not defined
+2025-07-10 07:33:58,730 INFO MT5 shutdown complete.

@@ -1,6 +1,10 @@
 # project_10k_to_1m/paper_trade/mt5watch.py
 
-import os
+import os, sys
+# mt5watch.py の親フォルダ(＝paper_trade)のさらに上の階層をプロジェクトルートとみなす
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 import yaml
 import logging
 from logging.handlers import RotatingFileHandler
@@ -61,25 +65,23 @@ if not os.path.exists(signal_csv):
     ]).to_csv(signal_csv, index=False)
 
 # ─── Webhook（Slackのみ）────────────────────────────────────────────────
-'''
-def send_webhook(message: str):
-    url     = cfg['webhook']['slack_url']
-    timeout = cfg['webhook']['timeout_seconds']
-    for attempt in range(cfg['webhook']['retry_count']):
-        try:
-            resp = requests.post(
-                url,
-                json={'text': message},
-                timeout=timeout
-            )
-            if resp.status_code == 200:
-                return
-            else:
-                logger.warning(f"Webhook responded {resp.status_code}: {resp.text}")
-        except Exception as e:
-            logger.error(f"Webhook send failed attempt {attempt+1}: {e}")
-            time.sleep(1)
-'''
+# def send_webhook(message: str):
+#     url     = cfg['webhook']['slack_url']
+#     timeout = cfg['webhook']['timeout_seconds']
+#     for attempt in range(cfg['webhook']['retry_count']):
+#         try:
+#             resp = requests.post(
+#                 url,
+#                 json={'text': message},
+#                 timeout=timeout
+#             )
+#             if resp.status_code == 200:
+#                 return
+#             else:
+#                 logger.warning(f"Webhook responded {resp.status_code}: {resp.text}")
+#         except Exception as e:
+#             logger.error(f"Webhook send failed attempt {attempt+1}: {e}")
+#             time.sleep(1)
 # ─── 最新バー取得関数 ─────────────────────────────────────────────────
 def fetch_latest_bar():
     symbol   = cfg['mt5']['symbol']

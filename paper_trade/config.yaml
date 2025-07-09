@@ -15,7 +15,7 @@ trade:
   slippage_pips: 1.0
 
 model:
-  path: "..C:/Projects/project_10k_to_1m_data/processed/USDJPY/M5/xgb_model_USDJPY_M5_100000_*.pkl"
+  path: C:\Projects\project_10k_to_1m_data\processed\USDJPY\M5\xgb_model_USDJPY_M5_100000_073515.pkl
   threshold_long: 0.55
   threshold_short: 0.40
 
