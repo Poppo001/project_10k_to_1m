@@ -1,42 +1,42 @@
 # project_10k_to_1m/paper_trade/config.yaml
 
 mt5:
-  symbol: "USDJPY"
-  timeframe: "M5"
-  login: 70042530
-  password: 2090XM_torihiki
-  server: XMTrading-MT5 3
+  symbol: "USDJPY"                          
+  timeframe: "H1"                           
+  login: 12345678                           
+  password: "your_password"                 
+  server: "YourBroker-Server"               
   path: "C:\\Program Files\\MetaTrader 5\\terminal64.exe"
-  timezone: "Asia/Tokyo"
+  timezone: "Asia/Tokyo"                    
 
 trade:
-  lot_size: 0.1
-  spread_pips: 2.5
-  slippage_pips: 1.0
+  lot_size: 0.1                             
+  spread_pips: 2.5                          
+  slippage_pips: 1.0                        
 
 model:
-  path: C:\Projects\project_10k_to_1m_data\processed\USDJPY\M5\xgb_model_USDJPY_M5_100000_073515.pkl
-  threshold_long: 0.55
-  threshold_short: 0.40
+  path: "../project_10k_to_1m_data/processed/models/xgb_model.pkl"
+  threshold_long: 0.55                      
+  threshold_short: 0.40                     
 
 features:
-  atr_window: 14
-  rsi_window: 14
-  ma_window: 20
-  shap_sample_size: 100
-  shap_threshold: 0.80
+  atr_window: 14                            
+  rsi_window: 14                            
+  ma_window: 20                             
+  shap_sample_size: 100                     
+  shap_threshold: 0.80                      
 
 output:
-  signal_csv: "paper_trade/signals.csv"
-  log_file: "paper_trade/mt5watch.log"
+  signal_csv: "paper_trade/signals.csv"     
+  log_file: "paper_trade/mt5watch.log"      
 
-#webhook:
-#  slack_url: "https://hooks.slack.com/services/XXXX/XXXX/XXXX"
-#  timeout_seconds: 5
-#  retry_count: 3
-#  error_notify_channel: "#alerts"
+slack:
+  bot_token: ""
+  channel_id: "C095R9G46JU"     # 通知先チャンネルID（例：#alerts の場合、Slack APIで確認またはチャネルURLから取得）
+  timeout_seconds: 5
+  retry_count: 3
 
 logging:
-  level: "INFO"
-  max_bytes: 10485760
-  backup_count: 5
+  level: "INFO"            
+  max_bytes: 10485760      
+  backup_count: 5          

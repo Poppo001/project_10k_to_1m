@@ -16,3 +16,150 @@ Traceback (most recent call last):
     send_webhook(f"推論エラー: {e}")
 NameError: name 'send_webhook' is not defined
 2025-07-10 07:33:58,730 INFO MT5 shutdown complete.
+2025-07-10 07:37:25,211 INFO MT5 initialized successfully.
+2025-07-10 07:37:25,211 INFO mt5watch started.
+2025-07-10 07:37:25,353 ERROR 推論エラー: generate_features() got an unexpected keyword argument 'atr_window'
+2025-07-10 07:37:25,353 ERROR 予期せぬ例外: name 'send_webhook' is not defined
+Traceback (most recent call last):
+  File "c:\Projects\project_10k_to_1m\paper_trade\mt5watch.py", line 110, in decide_signal
+    feats     = generate_features(bar, **cfg['features'])
+TypeError: generate_features() got an unexpected keyword argument 'atr_window'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "c:\Projects\project_10k_to_1m\paper_trade\mt5watch.py", line 141, in <module>
+    sig = decide_signal(bar)
+  File "c:\Projects\project_10k_to_1m\paper_trade\mt5watch.py", line 115, in decide_signal
+    send_webhook(f"推論エラー: {e}")
+NameError: name 'send_webhook' is not defined
+2025-07-10 07:37:25,353 INFO MT5 shutdown complete.
+2025-07-14 05:27:37,064 INFO MT5 initialized successfully.
+2025-07-14 05:27:37,064 INFO mt5watch started.
+2025-07-14 05:27:40,888 ERROR 推論エラー: generate_features() got an unexpected keyword argument 'atr_window'
+2025-07-14 05:27:40,888 ERROR 予期せぬ例外: name 'send_webhook' is not defined
+Traceback (most recent call last):
+  File "c:\Projects\project_10k_to_1m\paper_trade\mt5watch.py", line 124, in decide_signal
+    feats     = generate_features(bar, **cfg['features'])
+TypeError: generate_features() got an unexpected keyword argument 'atr_window'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "c:\Projects\project_10k_to_1m\paper_trade\mt5watch.py", line 155, in <module>
+    sig = decide_signal(bar)
+  File "c:\Projects\project_10k_to_1m\paper_trade\mt5watch.py", line 129, in decide_signal
+    send_webhook(f"推論エラー: {e}")
+NameError: name 'send_webhook' is not defined
+2025-07-14 05:27:40,896 INFO MT5 shutdown complete.
+2025-07-14 05:29:56,103 INFO MT5 initialized successfully.
+2025-07-14 05:29:56,103 INFO mt5watch started.
+2025-07-14 05:29:56,246 ERROR 推論エラー: 'numpy.float64' object has no attribute 'rolling'
+2025-07-14 05:30:00,791 ERROR 推論エラー: 'numpy.float64' object has no attribute 'rolling'
+2025-07-14 05:30:42,001 INFO mt5watch stopped by user.
+2025-07-14 05:30:42,001 INFO MT5 shutdown complete.
+2025-07-14 05:31:07,323 INFO MT5 initialized successfully.
+2025-07-14 05:31:07,323 INFO mt5watch started.
+2025-07-14 05:31:07,557 ERROR 推論エラー: Feature shape mismatch, expected: 10, got 11
+2025-07-14 05:32:00,037 ERROR 推論エラー: Feature shape mismatch, expected: 10, got 11
+2025-07-14 05:32:13,998 INFO mt5watch stopped by user.
+2025-07-14 05:32:13,998 INFO MT5 shutdown complete.
+2025-07-14 05:32:33,151 INFO MT5 initialized successfully.
+2025-07-14 05:32:33,151 INFO mt5watch started.
+2025-07-14 05:32:33,305 ERROR 推論エラー: "['return'] not in index"
+2025-07-14 05:33:00,824 ERROR 推論エラー: "['return'] not in index"
+2025-07-14 05:33:07,259 INFO mt5watch stopped by user.
+2025-07-14 05:33:07,259 INFO MT5 shutdown complete.
+2025-07-14 05:33:37,902 INFO MT5 initialized successfully.
+2025-07-14 05:33:37,910 INFO mt5watch started.
+2025-07-14 05:33:38,070 ERROR 推論エラー: Feature shape mismatch: expected 10, got 11
+2025-07-14 05:34:00,618 ERROR 推論エラー: Feature shape mismatch: expected 10, got 11
+2025-07-14 05:34:05,090 INFO mt5watch stopped by user.
+2025-07-14 05:34:05,090 INFO MT5 shutdown complete.
+2025-07-14 05:34:36,611 INFO MT5 initialized successfully.
+2025-07-14 05:34:36,611 INFO mt5watch started.
+2025-07-14 05:34:36,765 ERROR 推論エラー: "['return'] not in index"
+2025-07-14 05:35:00,251 ERROR 推論エラー: "['return'] not in index"
+2025-07-14 05:35:09,849 INFO mt5watch stopped by user.
+2025-07-14 05:35:09,849 INFO MT5 shutdown complete.
+2025-07-14 05:35:46,768 INFO MT5 initialized successfully.
+2025-07-14 05:35:46,768 INFO mt5watch started.
+2025-07-14 05:35:46,944 INFO 2025-07-12 08:50:00+09:00 SHORT @ 147.409 → exec 147.40865
+2025-07-14 06:01:00,112 INFO 2025-07-12 08:55:00+09:00 SHORT @ 147.424 → exec 147.42365
+2025-07-14 06:05:00,742 INFO 2025-07-14 09:00:00+09:00 SHORT @ 147.141 → exec 147.14065
+2025-07-14 06:11:00,309 INFO 2025-07-14 09:05:00+09:00 SHORT @ 147.167 → exec 147.16665
+2025-07-14 06:15:00,859 INFO 2025-07-14 09:10:00+09:00 SHORT @ 147.176 → exec 147.17565
+2025-07-14 06:21:00,507 INFO 2025-07-14 09:15:00+09:00 SHORT @ 147.172 → exec 147.17165
+2025-07-14 06:26:00,052 INFO 2025-07-14 09:20:00+09:00 SHORT @ 147.184 → exec 147.18365
+2025-07-14 06:30:00,581 INFO 2025-07-14 09:25:00+09:00 SHORT @ 147.189 → exec 147.18865
+2025-07-14 06:36:00,119 INFO 2025-07-14 09:30:00+09:00 SHORT @ 147.18 → exec 147.17965
+2025-07-14 06:41:00,555 INFO 2025-07-14 09:35:00+09:00 SHORT @ 147.169 → exec 147.16865
+2025-07-14 06:46:00,964 INFO 2025-07-14 09:40:00+09:00 SHORT @ 147.164 → exec 147.16365
+2025-07-14 06:51:00,505 INFO 2025-07-14 09:45:00+09:00 SHORT @ 147.165 → exec 147.16465
+2025-07-14 06:56:00,054 INFO 2025-07-14 09:50:00+09:00 SHORT @ 147.171 → exec 147.17065
+2025-07-14 07:00:00,596 INFO 2025-07-14 09:55:00+09:00 SHORT @ 147.14 → exec 147.13965
+2025-07-14 07:05:01,000 INFO 2025-07-14 10:00:00+09:00 SHORT @ 147.216 → exec 147.21565
+2025-07-14 07:10:00,596 INFO 2025-07-14 10:05:00+09:00 SHORT @ 147.219 → exec 147.21865
+2025-07-14 07:16:00,147 INFO 2025-07-14 10:10:00+09:00 SHORT @ 147.211 → exec 147.21065000000002
+2025-07-14 07:20:00,848 INFO 2025-07-14 10:15:00+09:00 SHORT @ 147.175 → exec 147.17465
+2025-07-14 07:26:00,259 INFO 2025-07-14 10:20:00+09:00 SHORT @ 147.185 → exec 147.18465
+2025-07-14 07:30:00,666 INFO 2025-07-14 10:25:00+09:00 SHORT @ 147.231 → exec 147.23065
+2025-07-14 07:36:00,090 INFO 2025-07-14 10:30:00+09:00 SHORT @ 147.315 → exec 147.31465
+2025-07-14 07:41:00,634 INFO 2025-07-14 10:35:00+09:00 SHORT @ 147.324 → exec 147.32365000000001
+2025-07-14 07:45:01,017 INFO 2025-07-14 10:40:00+09:00 SHORT @ 147.388 → exec 147.38765
+2025-07-14 07:51:00,447 INFO 2025-07-14 10:45:00+09:00 SHORT @ 147.388 → exec 147.38765
+2025-07-14 07:55:00,907 INFO 2025-07-14 10:50:00+09:00 SHORT @ 147.456 → exec 147.45565
+2025-07-14 08:01:00,493 INFO 2025-07-14 10:55:00+09:00 SHORT @ 147.491 → exec 147.49065000000002
+2025-07-14 08:06:00,932 INFO 2025-07-14 11:00:00+09:00 SHORT @ 147.508 → exec 147.50765
+2025-07-14 08:11:00,348 INFO 2025-07-14 11:05:00+09:00 SHORT @ 147.468 → exec 147.46765
+2025-07-14 08:15:00,770 INFO 2025-07-14 11:10:00+09:00 SHORT @ 147.444 → exec 147.44365
+2025-07-14 08:20:00,170 INFO 2025-07-14 11:15:00+09:00 SHORT @ 147.365 → exec 147.36465
+2025-07-14 08:26:00,608 INFO 2025-07-14 11:20:00+09:00 SHORT @ 147.29 → exec 147.28965
+2025-07-14 08:31:01,026 INFO 2025-07-14 11:25:00+09:00 SHORT @ 147.282 → exec 147.28165
+2025-07-14 08:36:00,450 INFO 2025-07-14 11:30:00+09:00 SHORT @ 147.291 → exec 147.29065
+2025-07-14 18:23:48,836 INFO 2025-07-14 21:15:00+09:00 SHORT @ 147.247 → exec 147.24665000000002
+2025-07-14 18:24:16,136 INFO mt5watch stopped by user.
+2025-07-14 18:24:16,137 INFO MT5 shutdown complete.
+2025-07-14 18:24:32,968 INFO MT5 initialized successfully.
+2025-07-14 18:24:32,970 INFO mt5watch started.
+2025-07-14 18:24:36,469 INFO 2025-07-14 21:15:00+09:00 SHORT @ 147.247 → exec 147.24665000000002
+2025-07-14 18:26:00,862 INFO 2025-07-14 21:20:00+09:00 SHORT @ 147.212 → exec 147.21165
+2025-07-14 18:31:00,285 INFO 2025-07-14 21:25:00+09:00 SHORT @ 147.217 → exec 147.21665000000002
+2025-07-14 18:36:00,705 INFO 2025-07-14 21:30:00+09:00 SHORT @ 147.17 → exec 147.16965
+2025-07-14 18:41:00,461 INFO 2025-07-14 21:35:00+09:00 SHORT @ 147.207 → exec 147.20665
+2025-07-14 18:46:00,884 INFO 2025-07-14 21:40:00+09:00 SHORT @ 147.261 → exec 147.26065
+2025-07-14 18:51:00,329 INFO 2025-07-14 21:45:00+09:00 SHORT @ 147.296 → exec 147.29565
+2025-07-14 18:56:00,780 INFO 2025-07-14 21:50:00+09:00 SHORT @ 147.286 → exec 147.28565
+2025-07-14 19:01:00,273 INFO 2025-07-14 21:55:00+09:00 SHORT @ 147.274 → exec 147.27365
+2025-07-14 19:06:00,683 INFO 2025-07-14 22:00:00+09:00 SHORT @ 147.207 → exec 147.20665
+2025-07-14 19:11:00,114 INFO 2025-07-14 22:05:00+09:00 SHORT @ 147.189 → exec 147.18865
+2025-07-14 19:16:00,540 INFO 2025-07-14 22:10:00+09:00 SHORT @ 147.199 → exec 147.19865000000001
+2025-07-14 19:21:00,974 INFO 2025-07-14 22:15:00+09:00 SHORT @ 147.191 → exec 147.19065
+2025-07-14 19:26:00,411 INFO 2025-07-14 22:20:00+09:00 SHORT @ 147.201 → exec 147.20065
+2025-07-14 19:31:00,855 INFO 2025-07-14 22:25:00+09:00 SHORT @ 147.181 → exec 147.18065
+2025-07-14 19:36:00,333 INFO 2025-07-14 22:30:00+09:00 SHORT @ 147.219 → exec 147.21865
+2025-07-14 19:41:00,765 INFO 2025-07-14 22:35:00+09:00 SHORT @ 147.242 → exec 147.24165
+2025-07-14 19:46:00,208 INFO 2025-07-14 22:40:00+09:00 SHORT @ 147.252 → exec 147.25165
+2025-07-14 19:51:00,654 INFO 2025-07-14 22:45:00+09:00 SHORT @ 147.249 → exec 147.24865
+2025-07-14 19:56:00,054 INFO 2025-07-14 22:50:00+09:00 SHORT @ 147.271 → exec 147.27065
+2025-07-14 20:01:00,497 INFO 2025-07-14 22:55:00+09:00 SHORT @ 147.19 → exec 147.18965
+2025-07-14 20:06:00,917 INFO 2025-07-14 23:00:00+09:00 SHORT @ 147.218 → exec 147.21765
+2025-07-14 20:11:00,340 INFO 2025-07-14 23:05:00+09:00 SHORT @ 147.239 → exec 147.23865
+2025-07-14 20:16:00,761 INFO 2025-07-14 23:10:00+09:00 SHORT @ 147.27 → exec 147.26965
+2025-07-14 20:21:00,172 INFO 2025-07-14 23:15:00+09:00 SHORT @ 147.281 → exec 147.28065
+2025-07-14 20:26:00,583 INFO 2025-07-14 23:20:00+09:00 SHORT @ 147.257 → exec 147.25665
+2025-07-14 20:31:00,134 INFO 2025-07-14 23:25:00+09:00 SHORT @ 147.238 → exec 147.23765
+2025-07-14 20:36:00,593 INFO 2025-07-14 23:30:00+09:00 SHORT @ 147.283 → exec 147.28265
+2025-07-14 20:41:00,998 INFO 2025-07-14 23:35:00+09:00 SHORT @ 147.287 → exec 147.28665
+2025-07-14 20:46:00,404 INFO 2025-07-14 23:40:00+09:00 SHORT @ 147.345 → exec 147.34465
+2025-07-14 20:51:00,841 INFO 2025-07-14 23:45:00+09:00 SHORT @ 147.433 → exec 147.43265
+2025-07-14 20:56:00,344 INFO 2025-07-14 23:50:00+09:00 SHORT @ 147.417 → exec 147.41665
+2025-07-14 21:01:00,755 INFO 2025-07-14 23:55:00+09:00 SHORT @ 147.401 → exec 147.40065
+2025-07-14 21:06:00,189 INFO 2025-07-15 00:00:00+09:00 SHORT @ 147.34 → exec 147.33965
+2025-07-14 21:11:00,640 INFO 2025-07-15 00:05:00+09:00 SHORT @ 147.356 → exec 147.35565
+2025-07-14 21:16:00,078 INFO 2025-07-15 00:10:00+09:00 SHORT @ 147.29 → exec 147.28965
+2025-07-14 21:21:00,495 INFO 2025-07-15 00:15:00+09:00 SHORT @ 147.219 → exec 147.21865
+2025-07-16 04:42:00,684 INFO 2025-07-16 07:35:00+09:00 SHORT @ 148.876 → exec 148.87565
+2025-07-16 04:46:00,246 INFO 2025-07-16 07:40:00+09:00 SHORT @ 148.869 → exec 148.86865
+2025-07-16 04:48:12,248 INFO mt5watch stopped by user.
+2025-07-16 04:48:12,248 INFO MT5 shutdown complete.

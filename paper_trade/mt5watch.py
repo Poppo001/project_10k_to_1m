@@ -1,10 +1,6 @@
 # project_10k_to_1m/paper_trade/mt5watch.py
 
-import os, sys
-# mt5watch.py の親フォルダ(＝paper_trade)のさらに上の階層をプロジェクトルートとみなす
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)
+import os
 import yaml
 import logging
 from logging.handlers import RotatingFileHandler
@@ -18,10 +14,12 @@ import requests
 
 from src.data.feature_gen import generate_features
 
+
 # ─── 設定読み込み ───────────────────────────────────────────────────────
 config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
 with open(config_path, encoding='utf-8-sig') as f:
     cfg = yaml.safe_load(f)
+
 
 # ─── ログ設定 ─────────────────────────────────────────────────────────
 os.makedirs(os.path.dirname(cfg['output']['log_file']), exist_ok=True)
@@ -38,23 +36,26 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.addHandler(logging.StreamHandler())
 
+
 # ─── モデルロード ─────────────────────────────────────────────────────
 with open(cfg['model']['path'], 'rb') as f:
     model = pickle.load(f)
-threshold_long = cfg['model']['threshold_long']
+threshold_long  = cfg['model']['threshold_long']
 threshold_short = cfg['model']['threshold_short']
+
 
 # ─── MT5 初期化 ───────────────────────────────────────────────────────
 init_args = {
-    "path": cfg['mt5']['path'],
-    "login": cfg['mt5']['login'],
+    "path":     cfg['mt5']['path'],
+    "login":    cfg['mt5']['login'],
     "password": cfg['mt5']['password'],
-    "server": cfg['mt5']['server']
+    "server":   cfg['mt5']['server']
 }
 if not mt5.initialize(**init_args):
     logger.error(f"MT5 initialize failed: {mt5.last_error()}")
     raise SystemExit("MT5 の初期化に失敗しました。")
 logger.info("MT5 initialized successfully.")
+
 
 # ─── CSV 出力準備 ─────────────────────────────────────────────────────
 signal_csv = cfg['output']['signal_csv']
@@ -64,24 +65,43 @@ if not os.path.exists(signal_csv):
         'time','signal','price','spread','slippage','exec_price'
     ]).to_csv(signal_csv, index=False)
 
-# ─── Webhook（Slackのみ）────────────────────────────────────────────────
-# def send_webhook(message: str):
-#     url     = cfg['webhook']['slack_url']
-#     timeout = cfg['webhook']['timeout_seconds']
-#     for attempt in range(cfg['webhook']['retry_count']):
-#         try:
-#             resp = requests.post(
-#                 url,
-#                 json={'text': message},
-#                 timeout=timeout
-#             )
-#             if resp.status_code == 200:
-#                 return
-#             else:
-#                 logger.warning(f"Webhook responded {resp.status_code}: {resp.text}")
-#         except Exception as e:
-#             logger.error(f"Webhook send failed attempt {attempt+1}: {e}")
-#             time.sleep(1)
+
+# ─── Slack 認証トークン読み込み ─────────────────────────────────────────
+slack_token = os.getenv('SLACK_BOT_TOKEN') or cfg['slack'].get('bot_token')
+if not slack_token:
+    logger.error("Slack トークンが設定されていません。環境変数 SLACK_BOT_TOKEN をご確認ください。")
+    raise SystemExit("Slack トークン未設定により終了。")
+
+HEADERS = {
+    'Authorization': f'Bearer {slack_token}',
+    'Content-Type': 'application/json; charset=utf-8'
+}
+
+
+# ─── Slack 通知関数 ────────────────────────────────────────────────────
+def send_slack(message: str):
+    payload = {
+        'channel': cfg['slack']['channel_id'],
+        'text':    message
+    }
+    for attempt in range(cfg['slack']['retry_count']):
+        try:
+            resp = requests.post(
+                'https://slack.com/api/chat.postMessage',
+                headers=HEADERS,
+                json=payload,
+                timeout=cfg['slack']['timeout_seconds']
+            )
+            data = resp.json()
+            if resp.status_code == 200 and data.get('ok'):
+                return
+            else:
+                logger.warning(f"Slack API error: {data}")
+        except Exception as e:
+            logger.error(f"Slack 送信失敗 (attempt {attempt+1}): {e}")
+            time.sleep(1)
+
+
 # ─── 最新バー取得関数 ─────────────────────────────────────────────────
 def fetch_latest_bar():
     symbol   = cfg['mt5']['symbol']
@@ -98,21 +118,24 @@ def fetch_latest_bar():
         'close': bar['close']
     })
 
+
 # ─── シグナル重複防止用変数 ───────────────────────────────────────────
 last_signal_time = None
+
 
 # ─── シグナル判定／推論関数 ─────────────────────────────────────────
 def decide_signal(bar: pd.Series):
     global last_signal_time
     if last_signal_time == bar['time']:
         return None
+
     try:
-        feats     = generate_features(bar, **cfg['features'])
-        X         = feats.values.reshape(1, -1)
+        feats      = generate_features(bar, **cfg['features'])
+        X          = feats.values.reshape(1, -1)
         proba_long = model.predict_proba(X)[0][1]
     except Exception as e:
         logger.error(f"推論エラー: {e}")
-        send_webhook(f"推論エラー: {e}")
+        send_slack(f"推論エラー: {e}")
         return None
 
     signal = None
@@ -125,13 +148,15 @@ def decide_signal(bar: pd.Series):
         last_signal_time = bar['time']
     return signal
 
+
 # ─── シグナル書き込み関数 ───────────────────────────────────────────
 def append_signal(rec: dict):
     try:
         pd.DataFrame([rec]).to_csv(signal_csv, mode='a', header=False, index=False)
     except Exception as e:
         logger.error(f"CSV書き込みエラー: {e}")
-        send_webhook(f"CSV書き込みエラー: {e}")
+        send_slack(f"CSV書き込みエラー: {e}")
+
 
 # ─── メインループ ───────────────────────────────────────────────────
 try:
@@ -147,22 +172,22 @@ try:
                 else bar['close'] - ((spread + slip)/10000)
             )
             record = {
-                'time':     bar['time'],
-                'signal':   sig,
-                'price':    bar['close'],
-                'spread':   spread,
-                'slippage': slip,
+                'time':       bar['time'],
+                'signal':     sig,
+                'price':      bar['close'],
+                'spread':     spread,
+                'slippage':   slip,
                 'exec_price': exec_price
             }
             append_signal(record)
 
             msg = f"{bar['time']} {sig} @ {bar['close']} → exec {exec_price}"
             logger.info(msg)
-            send_webhook(msg)
+            send_slack(msg)
 
-        # 1分ちょうどに動かす
-        now        = datetime.datetime.now(pytz.timezone(cfg['mt5']['timezone']))
-        sleep_sec  = 60 - now.second
+        # 次の1分ちょうどに待機
+        now       = datetime.datetime.now(pytz.timezone(cfg['mt5']['timezone']))
+        sleep_sec = 60 - now.second
         time.sleep(sleep_sec)
 
 except KeyboardInterrupt:
@@ -170,7 +195,7 @@ except KeyboardInterrupt:
 
 except Exception as e:
     logger.exception(f"予期せぬ例外: {e}")
-    send_webhook(f"mt5watch fatal error: {e}")
+    send_slack(f"mt5watch fatal error: {e}")
 
 finally:
     mt5.shutdown()
